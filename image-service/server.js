@@ -10,63 +10,127 @@
  *                       ->  { base64: "<png-without-data-uri-prefix>" }
  *   GET  /health        ->  { ok: true }
  *
- * Styling/highlight/negative logic mirrors ui.html so the WhatsApp image
- * matches the in-browser "Download PNG".
+ * The styling / highlight / negative-number logic mirrors ui.html, so the
+ * WhatsApp image matches the in-browser "Download PNG" exactly.
  * ---------------------------------------------------------------------------
+ *
+ * How it works, end to end:
+ *   1. Build an HTML page from the P&L JSON   (buildPageHtml)
+ *   2. Open that page in a headless Chromium  (getBrowser + renderPngBase64)
+ *   3. Screenshot the card and return base64   (POST /generate-image)
  */
+
 const express = require("express");
 const puppeteer = require("puppeteer-core");
 
 const PORT = process.env.PORT || 3001;
-const EXECUTABLE = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
+// Path to the system Chromium binary (set in the Dockerfile). puppeteer-core
+// never downloads its own browser, so this must point at a real Chromium.
+const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
 
-// ── P&L -> HTML (mirrors ui.html buildTable/buildCard) ───────────────────────
-const HL = ["revenue", "gross profit", "ebitda", "total expenses", "profit before tax", "profit/loss before tax", "pat", "eps"];
-function isHl(label) {
-  const l = String(label || "").toLowerCase();
-  return HL.some((k) => l === k || l.indexOf(k) === 0) || l.indexOf("ebitda") > -1 || l === "revenue";
+/* ════════════════════════════════════════════════════════════════════════
+ * SECTION 1 — Turn the P&L JSON into an HTML page
+ * (kept byte-for-byte in sync with ui.html so both renderers look identical)
+ * ════════════════════════════════════════════════════════════════════════ */
+
+// Rows whose label matches one of these are emphasised (bold + green tint).
+const HIGHLIGHT_LABELS = [
+  "revenue",
+  "gross profit",
+  "ebitda",
+  "total expenses",
+  "profit before tax",
+  "profit/loss before tax",
+  "pat",
+  "eps",
+];
+
+/** True for "key" rows (Revenue, EBITDA, PAT, …) that should be highlighted. */
+function isHighlightRow(label) {
+  const text = String(label || "").toLowerCase();
+  const matchesKeyword = HIGHLIGHT_LABELS.some(
+    (keyword) => text === keyword || text.startsWith(keyword)
+  );
+  return matchesKeyword || text.includes("ebitda") || text === "revenue";
 }
-function isNeg(v) {
-  if (!v) return false;
-  const c = String(v).replace(/[%,]/g, "").trim();
-  return !isNaN(parseFloat(c)) && parseFloat(c) < 0;
+
+/** True if a cell holds a negative number (e.g. "-12.34" or "-5.6%"). */
+function isNegativeValue(value) {
+  if (!value) return false;
+  const cleaned = String(value).replace(/[%,]/g, "").trim();
+  const num = parseFloat(cleaned);
+  return !isNaN(num) && num < 0;
 }
-function esc(s) {
-  return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+/** Escape a value so it is safe to drop into HTML. */
+function escapeHtml(value) {
+  return String(value == null ? "" : value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
-function rowsOf(data) {
-  const r = [];
-  let i = 1;
-  while (data["row" + i]) {
-    if (Array.isArray(data["row" + i])) r.push(data["row" + i].map((x) => (x == null ? "" : String(x))));
-    i++;
+
+/**
+ * Collect the row1, row2, … arrays from the P&L object, in order, as a list of
+ * string arrays. Row 1 is the header; the rest are data rows.
+ */
+function extractRows(data) {
+  const rows = [];
+  for (let i = 1; data["row" + i]; i++) {
+    const row = data["row" + i];
+    if (Array.isArray(row)) {
+      rows.push(row.map((cell) => (cell == null ? "" : String(cell))));
+    }
   }
-  return r;
+  return rows;
 }
-function buildTable(data) {
-  const rows = rowsOf(data);
-  if (!rows.length) return "<p>No rows.</p>";
-  const head = rows[0];
-  const body = rows.slice(1);
-  const th = head.map((h) => "<th>" + esc(h) + "</th>").join("");
-  const tr = body
-    .map((r) => {
-      const label = r[0] || "";
-      const blank = r.slice(1).every((c) => c === "");
-      const cls = isHl(label) ? "hl" : blank ? "sub" : "";
-      const tds = r
-        .map((c, idx) => {
-          const neg = idx > 0 && isNeg(c) ? ' class="neg"' : "";
-          return "<td" + neg + ">" + esc(c) + "</td>";
+
+/** Render the <table> (header row + data rows) for the P&L. */
+function buildTableHtml(data) {
+  const rows = extractRows(data);
+  if (rows.length === 0) return "<p>No rows.</p>";
+
+  const headerCells = rows[0];
+  const dataRows = rows.slice(1);
+
+  const headerHtml = headerCells.map((cell) => `<th>${escapeHtml(cell)}</th>`).join("");
+
+  const bodyHtml = dataRows
+    .map((row) => {
+      const label = row[0] || "";
+      // A "section heading" row (e.g. "Expenses") has no values in its other cells.
+      const isSectionHeading = row.slice(1).every((cell) => cell === "");
+
+      let rowClass = "";
+      if (isHighlightRow(label)) rowClass = "hl";
+      else if (isSectionHeading) rowClass = "sub";
+
+      const cellsHtml = row
+        .map((cell, index) => {
+          // First column is the label; the rest are numeric values.
+          const negativeClass = index > 0 && isNegativeValue(cell) ? ' class="neg"' : "";
+          return `<td${negativeClass}>${escapeHtml(cell)}</td>`;
         })
         .join("");
-      return '<tr class="' + cls + '">' + tds + "</tr>";
+
+      return `<tr class="${rowClass}">${cellsHtml}</tr>`;
     })
     .join("");
-  return "<table><thead><tr>" + th + "</tr></thead><tbody>" + tr + "</tbody></table>";
+
+  return `<table><thead><tr>${headerHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
 }
-function buildHtml(data) {
-  const qt = data.quarter_type === "extended" ? "Extended (Q2/Q4)" : "Standard (Q1/Q3)";
+
+/**
+ * Build the full HTML page (the green P&L card) that Chromium will screenshot.
+ * NOTE: the markup/CSS here is intentionally identical to ui.html's card so the
+ * WhatsApp image matches the browser "Download PNG". Edit both together.
+ */
+function buildPageHtml(data) {
+  const quarterLabel =
+    data.quarter_type === "extended" ? "Extended (Q2/Q4)" : "Standard (Q1/Q3)";
+  const companyName = escapeHtml(data.company_name || "Unknown Company");
+
   return `<!DOCTYPE html><html><head><meta charset="utf-8" /><style>
     :root{--green-900:#0f3d1e;--green-800:#1b5e20;--green-700:#2e7d32;--green-100:#e8f5e9;--ink:#10231a;--muted:#5b6b62;--line:#e3e9e5;--red:#d32f2f;}
     *{box-sizing:border-box;margin:0;padding:0}
@@ -88,65 +152,91 @@ function buildHtml(data) {
     .pnl-foot{background:#f5f8f6;padding:7px 16px;text-align:right;font-size:10px;color:var(--muted);border-top:1px solid var(--line)}
   </style></head><body>
     <div class="frame"><div class="pnl">
-      <div class="pnl-head"><div class="h1">${esc(data.company_name || "Unknown Company")}</div>
-      <div class="sub">Quarterly Financial Results — ${qt} · All values in ₹ Crores</div></div>
-      ${buildTable(data)}
+      <div class="pnl-head"><div class="h1">${companyName}</div>
+      <div class="sub">Quarterly Financial Results — ${quarterLabel} · All values in ₹ Crores</div></div>
+      ${buildTableHtml(data)}
       <div class="pnl-foot">Generated by Niveshaay Financial Results Processor</div>
     </div></div>
   </body></html>`;
 }
 
-// ── Browser (lazy singleton, reconnect if it dies) ───────────────────────────
+/* ════════════════════════════════════════════════════════════════════════
+ * SECTION 2 — Headless Chromium (reused across requests)
+ * ════════════════════════════════════════════════════════════════════════ */
+
+// Launching Chromium is slow, so we keep ONE browser alive and reuse it.
+// `browserPromise` caches the in-flight/last launch; if the browser has died
+// we relaunch transparently.
 let browserPromise = null;
+
 async function getBrowser() {
   if (browserPromise) {
     try {
-      const b = await browserPromise;
-      if (b.connected) return b;
+      const browser = await browserPromise;
+      if (browser.connected) return browser;
     } catch (_) {
-      /* fall through and relaunch */
+      // Previous launch failed or the browser crashed — fall through to relaunch.
     }
   }
+
   browserPromise = puppeteer.launch({
-    executablePath: EXECUTABLE,
+    executablePath: CHROMIUM_PATH,
     headless: true,
+    // Flags required to run Chromium inside a container as a non-root/limited user.
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
   });
   return browserPromise;
 }
 
-async function renderPng(data) {
+/* ════════════════════════════════════════════════════════════════════════
+ * SECTION 3 — Render the P&L JSON to a PNG (base64)
+ * ════════════════════════════════════════════════════════════════════════ */
+
+async function renderPngBase64(data) {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
+    // Render at 2x for a crisp image; the card sizes itself to its content.
     await page.setViewport({ width: 1600, height: 900, deviceScaleFactor: 2 });
-    await page.setContent(buildHtml(data), { waitUntil: "networkidle0" });
-    const el = (await page.$(".frame")) || page;
-    const buf = await el.screenshot({ type: "png" });
-    return Buffer.from(buf).toString("base64");
+    await page.setContent(buildPageHtml(data), { waitUntil: "networkidle0" });
+
+    // Screenshot just the ".frame" element (the card + its white padding),
+    // falling back to the whole page if the selector isn't found.
+    const target = (await page.$(".frame")) || page;
+    const pngBuffer = await target.screenshot({ type: "png" });
+    return Buffer.from(pngBuffer).toString("base64");
   } finally {
-    await page.close();
+    await page.close(); // always release the tab, even on error
   }
 }
 
-// ── HTTP ─────────────────────────────────────────────────────────────────────
-const app = express();
-app.use(express.json({ limit: "5mb" }));
+/* ════════════════════════════════════════════════════════════════════════
+ * SECTION 4 — HTTP server
+ * ════════════════════════════════════════════════════════════════════════ */
 
+const app = express();
+app.use(express.json({ limit: "5mb" })); // base64 PDFs/images can be large
+
+// Liveness check used by docker / the README troubleshooting steps.
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+// Main endpoint: P&L JSON in, PNG (base64) out.
 app.post("/generate-image", async (req, res) => {
+  // Accept either { data: {...} } (how n8n sends it) or the bare P&L object.
   const data = (req.body && req.body.data) || req.body;
+
   if (!data || typeof data !== "object" || !data.row1) {
     return res.status(400).json({ error: "Expected JSON body { data: { row1, ... } }" });
   }
+
   try {
-    const base64 = await renderPng(data);
+    const base64 = await renderPngBase64(data);
     res.json({ base64 });
-  } catch (e) {
-    console.error("render failed:", e);
-    res.status(500).json({ error: "Failed to render image: " + (e && e.message ? e.message : String(e)) });
+  } catch (err) {
+    console.error("render failed:", err);
+    const message = err && err.message ? err.message : String(err);
+    res.status(500).json({ error: "Failed to render image: " + message });
   }
 });
 
-app.listen(PORT, () => console.log(`image-service listening on :${PORT} (chromium=${EXECUTABLE})`));
+app.listen(PORT, () => console.log(`image-service listening on :${PORT} (chromium=${CHROMIUM_PATH})`));
