@@ -14,3 +14,6 @@ npm-debug.log*
 
 # scratch (contains the revoked key for the interviewer)
 KEY_PROOF.txt
+
+# TypeScript build output
+dist/

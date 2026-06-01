@@ -1,40 +1,46 @@
 /**
- * Niveshaay image-service — Puppeteer P&L PNG renderer.
+ * Niveshaay image-service — Puppeteer P&L PNG renderer (TypeScript).
  * ---------------------------------------------------------------------------
  * The ONLY external service the WhatsApp branch needs. The n8n "Render Image"
  * node POSTs the standardized P&L JSON here; we render the same styled green
  * card the UI shows (ui.html) and return it as a PNG (base64), which the
  * "Send to WhatsApp" node forwards to Evolution sendMedia.
  *
- *   POST /generate-image   { data: { company_name, quarter_type, row1..rowN } }
- *                       ->  { base64: "<png-without-data-uri-prefix>" }
- *   GET  /health        ->  { ok: true }
+ *   POST /generate-image   { data: PnlData }  ->  { base64: string }
+ *   GET  /health                              ->  { ok: true }
  *
- * The styling / highlight / negative-number logic mirrors ui.html, so the
- * WhatsApp image matches the in-browser "Download PNG" exactly.
+ * Pipeline:  P&L JSON -> HTML (buildPageHtml) -> headless Chromium -> PNG.
+ * The styling / highlight / negative logic mirrors ui.html so the WhatsApp
+ * image matches the in-browser "Download PNG" exactly.
  * ---------------------------------------------------------------------------
- *
- * How it works, end to end:
- *   1. Build an HTML page from the P&L JSON   (buildPageHtml)
- *   2. Open that page in a headless Chromium  (getBrowser + renderPngBase64)
- *   3. Screenshot the card and return base64   (POST /generate-image)
  */
 
-const express = require("express");
-const puppeteer = require("puppeteer-core");
+import express, { type Request, type Response } from "express";
+import puppeteer, { type Browser } from "puppeteer-core";
 
-const PORT = process.env.PORT || 3001;
+const PORT: number = Number(process.env.PORT) || 3001;
 // Path to the system Chromium binary (set in the Dockerfile). puppeteer-core
 // never downloads its own browser, so this must point at a real Chromium.
-const CHROMIUM_PATH = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
+const CHROMIUM_PATH: string = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
+
+/**
+ * The standardized P&L object produced by the Gemini prompt.
+ * `row1` is the header; `row2..rowN` are data rows (each an array of cell strings).
+ */
+export interface PnlData {
+  company_name?: string;
+  quarter_type?: "standard" | "extended" | string;
+  /** row1, row2, … — accessed dynamically. Other keys may exist. */
+  [key: string]: string | string[] | undefined;
+}
 
 /* ════════════════════════════════════════════════════════════════════════
  * SECTION 1 — Turn the P&L JSON into an HTML page
  * (kept byte-for-byte in sync with ui.html so both renderers look identical)
  * ════════════════════════════════════════════════════════════════════════ */
 
-// Rows whose label matches one of these are emphasised (bold + green tint).
-const HIGHLIGHT_LABELS = [
+/** Rows whose label matches one of these are emphasised (bold + green tint). */
+const HIGHLIGHT_LABELS: readonly string[] = [
   "revenue",
   "gross profit",
   "ebitda",
@@ -46,7 +52,7 @@ const HIGHLIGHT_LABELS = [
 ];
 
 /** True for "key" rows (Revenue, EBITDA, PAT, …) that should be highlighted. */
-function isHighlightRow(label) {
+function isHighlightRow(label: string): boolean {
   const text = String(label || "").toLowerCase();
   const matchesKeyword = HIGHLIGHT_LABELS.some(
     (keyword) => text === keyword || text.startsWith(keyword)
@@ -55,7 +61,7 @@ function isHighlightRow(label) {
 }
 
 /** True if a cell holds a negative number (e.g. "-12.34" or "-5.6%"). */
-function isNegativeValue(value) {
+function isNegativeValue(value: string): boolean {
   if (!value) return false;
   const cleaned = String(value).replace(/[%,]/g, "").trim();
   const num = parseFloat(cleaned);
@@ -63,7 +69,7 @@ function isNegativeValue(value) {
 }
 
 /** Escape a value so it is safe to drop into HTML. */
-function escapeHtml(value) {
+function escapeHtml(value: unknown): string {
   return String(value == null ? "" : value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -75,10 +81,10 @@ function escapeHtml(value) {
  * Collect the row1, row2, … arrays from the P&L object, in order, as a list of
  * string arrays. Row 1 is the header; the rest are data rows.
  */
-function extractRows(data) {
-  const rows = [];
-  for (let i = 1; data["row" + i]; i++) {
-    const row = data["row" + i];
+function extractRows(data: PnlData): string[][] {
+  const rows: string[][] = [];
+  for (let i = 1; data[`row${i}`] !== undefined; i++) {
+    const row = data[`row${i}`];
     if (Array.isArray(row)) {
       rows.push(row.map((cell) => (cell == null ? "" : String(cell))));
     }
@@ -87,7 +93,7 @@ function extractRows(data) {
 }
 
 /** Render the <table> (header row + data rows) for the P&L. */
-function buildTableHtml(data) {
+function buildTableHtml(data: PnlData): string {
   const rows = extractRows(data);
   if (rows.length === 0) return "<p>No rows.</p>";
 
@@ -126,7 +132,7 @@ function buildTableHtml(data) {
  * NOTE: the markup/CSS here is intentionally identical to ui.html's card so the
  * WhatsApp image matches the browser "Download PNG". Edit both together.
  */
-function buildPageHtml(data) {
+function buildPageHtml(data: PnlData): string {
   const quarterLabel =
     data.quarter_type === "extended" ? "Extended (Q2/Q4)" : "Standard (Q1/Q3)";
   const companyName = escapeHtml(data.company_name || "Unknown Company");
@@ -167,14 +173,14 @@ function buildPageHtml(data) {
 // Launching Chromium is slow, so we keep ONE browser alive and reuse it.
 // `browserPromise` caches the in-flight/last launch; if the browser has died
 // we relaunch transparently.
-let browserPromise = null;
+let browserPromise: Promise<Browser> | null = null;
 
-async function getBrowser() {
+async function getBrowser(): Promise<Browser> {
   if (browserPromise) {
     try {
       const browser = await browserPromise;
       if (browser.connected) return browser;
-    } catch (_) {
+    } catch {
       // Previous launch failed or the browser crashed — fall through to relaunch.
     }
   }
@@ -192,7 +198,7 @@ async function getBrowser() {
  * SECTION 3 — Render the P&L JSON to a PNG (base64)
  * ════════════════════════════════════════════════════════════════════════ */
 
-async function renderPngBase64(data) {
+async function renderPngBase64(data: PnlData): Promise<string> {
   const browser = await getBrowser();
   const page = await browser.newPage();
   try {
@@ -202,8 +208,10 @@ async function renderPngBase64(data) {
 
     // Screenshot just the ".frame" element (the card + its white padding),
     // falling back to the whole page if the selector isn't found.
-    const target = (await page.$(".frame")) || page;
-    const pngBuffer = await target.screenshot({ type: "png" });
+    const frame = await page.$(".frame");
+    const pngBuffer = frame
+      ? await frame.screenshot({ type: "png" })
+      : await page.screenshot({ type: "png" });
     return Buffer.from(pngBuffer).toString("base64");
   } finally {
     await page.close(); // always release the tab, even on error
@@ -218,15 +226,19 @@ const app = express();
 app.use(express.json({ limit: "5mb" })); // base64 PDFs/images can be large
 
 // Liveness check used by docker / the README troubleshooting steps.
-app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ ok: true });
+});
 
 // Main endpoint: P&L JSON in, PNG (base64) out.
-app.post("/generate-image", async (req, res) => {
+app.post("/generate-image", async (req: Request, res: Response) => {
   // Accept either { data: {...} } (how n8n sends it) or the bare P&L object.
-  const data = (req.body && req.body.data) || req.body;
+  const body = req.body as { data?: PnlData } | PnlData | undefined;
+  const data = (body && (body as { data?: PnlData }).data) || (body as PnlData | undefined);
 
-  if (!data || typeof data !== "object" || !data.row1) {
-    return res.status(400).json({ error: "Expected JSON body { data: { row1, ... } }" });
+  if (!data || typeof data !== "object" || data.row1 === undefined) {
+    res.status(400).json({ error: "Expected JSON body { data: { row1, ... } }" });
+    return;
   }
 
   try {
@@ -234,7 +246,7 @@ app.post("/generate-image", async (req, res) => {
     res.json({ base64 });
   } catch (err) {
     console.error("render failed:", err);
-    const message = err && err.message ? err.message : String(err);
+    const message = err instanceof Error ? err.message : String(err);
     res.status(500).json({ error: "Failed to render image: " + message });
   }
 });

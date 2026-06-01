@@ -2,13 +2,21 @@
   "name": "niveshaay-image-service",
   "version": "1.0.0",
   "private": true,
-  "description": "Puppeteer P&L PNG renderer for the Niveshaay WhatsApp delivery branch",
-  "main": "server.js",
+  "description": "Puppeteer P&L PNG renderer for the Niveshaay WhatsApp delivery branch (TypeScript)",
+  "main": "dist/server.js",
   "scripts": {
-    "start": "node server.js"
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/server.js",
+    "dev": "ts-node src/server.ts"
   },
   "dependencies": {
     "express": "^4.21.2",
     "puppeteer-core": "^23.11.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^20.14.10",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.6.3"
   }
 }
