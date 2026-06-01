@@ -18,6 +18,10 @@ UI shows the result as a **Table**, raw **JSON** (copyable), and a downloadable
 |---|---|---|---|
 | ![landing](screenshots/01-landing.png) | ![table](screenshots/02-table.png) | ![json](screenshots/03-json.png) | ![image](screenshots/04-image.png) |
 
+Responsive (mobile — the wide P&L table scrolls horizontally):
+
+<img src="screenshots/05-mobile.png" width="320" alt="mobile" />
+
 ## What it does
 
 1. Open the n8n-served page at **`/webhook/ui`** and paste a `.pdf` link → **Extract P&L**.
