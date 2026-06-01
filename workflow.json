@@ -429,6 +429,103 @@
         2580,
         500
       ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $('Parse Response').first().json.data;\nconst jid = String($env.WHATSAPP_GROUP_JID || \"\").trim();\nreturn [{ json: { data, skip: !jid } }];"
+      },
+      "id": "nv-0020",
+      "name": "Prepare Send",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "c",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "nv-0021",
+      "name": "WhatsApp Configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3020,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.IMAGE_SERVICE_URL + \"/generate-image\" }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ data: $json.data }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "nv-0022",
+      "name": "Render Image",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3240,
+        380
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL + \"/message/sendMedia/\" + $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: \"image\", mimetype: \"image/png\", media: $json.base64, fileName: \"pnl.png\", caption: \"P&L Results: \" + ($('Parse Response').first().json.data.company_name || \"\") }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "nv-0023",
+      "name": "Send to WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        3460,
+        380
+      ],
+      "onError": "continueErrorOutput"
     }
   ],
   "connections": {
@@ -597,6 +694,52 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Success Response": {
+      "main": [
+        [
+          {
+            "node": "Prepare Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Send": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Configured?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Render Image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render Image": {
+      "main": [
+        [
+          {
+            "node": "Send to WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
       ]
     }
   },

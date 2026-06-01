@@ -90,7 +90,26 @@ return [{ json: { pdfUrl, error: false } }];
 const isValid = ifError("Is Valid?", "={{ $json.error }}", [680, 420]);
 const validationError = respondJson("Validation Error",
   '={{ JSON.stringify({ error: $json.message || "Invalid request" }) }}',
-  "={{ $json.statusCode || 400 }}", [900, 580]);
+  "={{ $json.statusCode || 400 }}", [900, 640]);
+
+// ── Cache (pure n8n via workflow static data; 7-day TTL) ──────────────────────
+const checkCache = code("Check Cache", `
+const pdfUrl = $json.pdfUrl;
+const store = $getWorkflowStaticData('global');
+store.cache = store.cache || {};
+const TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const hit = store.cache[pdfUrl];
+if (hit && hit.data && (Date.now() - (hit.ts || 0) < TTL)) {
+  return [{ json: { cached: true, data: hit.data, pdfUrl } }];
+}
+return [{ json: { cached: false, pdfUrl } }];
+`, [880, 420]);
+
+const isCached = ifError("Is Cached?", "={{ $json.cached }}", [1080, 420]);
+
+const cachedResponse = respondJson("Cached Response",
+  '={{ JSON.stringify({ success: true, data: $json.data, cached: true }) }}',
+  200, [1300, 240]);
 
 const downloadPdf = http("Download PDF", {
   url: "={{ $('Validate Input').first().json.pdfUrl }}",
@@ -146,9 +165,46 @@ const parseOk = ifError("Parse OK?", "={{ $json.error }}", [1780, 420]);
 const extractionError = respondJson("Extraction Error",
   '={{ JSON.stringify({ error: $json.message || "Extraction failed" }) }}',
   "={{ $json.statusCode || 502 }}", [2000, 600]);
+const writeCache = code("Write Cache", `
+const data = $json.data;
+const pdfUrl = $('Check Cache').first().json.pdfUrl;
+const store = $getWorkflowStaticData('global');
+store.cache = store.cache || {};
+store.cache[pdfUrl] = { data, ts: Date.now() };
+return [{ json: { data } }];
+`, [2220, 420]);
+
 const successResponse = respondJson("Success Response",
-  '={{ JSON.stringify({ success: true, data: $json.data }) }}',
-  200, [2000, 420]);
+  '={{ JSON.stringify({ success: true, data: $json.data, cached: false }) }}',
+  200, [2440, 420]);
+
+// ── WhatsApp delivery (after responding to the user) ──────────────────────────
+// Only on a FRESH extraction (cache hits don't re-spam). Gated on WHATSAPP_GROUP_JID.
+const prepareSend = code("Prepare Send", `
+const data = $('Parse Response').first().json.data;
+const jid = String($env.WHATSAPP_GROUP_JID || "").trim();
+return [{ json: { data, skip: !jid } }];
+`, [2660, 420]);
+
+const whatsappConfigured = ifError("WhatsApp Configured?", "={{ $json.skip }}", [2880, 420]);
+
+const renderImage = http("Render Image", {
+  method: "POST",
+  url: '={{ $env.IMAGE_SERVICE_URL + "/generate-image" }}',
+  sendBody: true, specifyBody: "json",
+  jsonBody: '={{ JSON.stringify({ data: $json.data }) }}',
+  options: { timeout: 30000 },
+}, [3100, 360], "continueErrorOutput");
+
+const sendWhatsapp = http("Send to WhatsApp", {
+  method: "POST",
+  url: '={{ $env.EVOLUTION_API_URL + "/message/sendMedia/" + $env.EVOLUTION_INSTANCE }}',
+  sendHeaders: true,
+  headerParameters: { parameters: [{ name: "apikey", value: "={{ $env.EVOLUTION_API_KEY }}" }] },
+  sendBody: true, specifyBody: "json",
+  jsonBody: '={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: "image", mimetype: "image/png", media: $json.base64, fileName: "pnl.png", caption: "P&L Results: " + ($(\'Parse Response\').first().json.data.company_name || "") }) }}',
+  options: { timeout: 30000 },
+}, [3320, 360], "continueErrorOutput");
 
 const workflow = {
   id: "niveshaayfinres1",
@@ -156,8 +212,10 @@ const workflow = {
   nodes: [
     webhookUi, serveUi,
     webhookProc, validate, isValid, validationError,
+    checkCache, isCached, cachedResponse,
     downloadPdf, downloadError, prepareGemini, callGemini, geminiError,
-    parseResponse, parseOk, extractionError, successResponse,
+    parseResponse, parseOk, extractionError, writeCache, successResponse,
+    prepareSend, whatsappConfigured, renderImage, sendWhatsapp,
   ],
   connections: {
     "Webhook UI": { main: [[{ node: "Serve UI", type: "main", index: 0 }]] },
@@ -165,6 +223,11 @@ const workflow = {
     "Validate Input": { main: [[{ node: "Is Valid?", type: "main", index: 0 }]] },
     "Is Valid?": { main: [
       [{ node: "Validation Error", type: "main", index: 0 }],
+      [{ node: "Check Cache", type: "main", index: 0 }],
+    ] },
+    "Check Cache": { main: [[{ node: "Is Cached?", type: "main", index: 0 }]] },
+    "Is Cached?": { main: [
+      [{ node: "Cached Response", type: "main", index: 0 }],
       [{ node: "Download PDF", type: "main", index: 0 }],
     ] },
     "Download PDF": { main: [
@@ -179,7 +242,18 @@ const workflow = {
     "Parse Response": { main: [[{ node: "Parse OK?", type: "main", index: 0 }]] },
     "Parse OK?": { main: [
       [{ node: "Extraction Error", type: "main", index: 0 }],
-      [{ node: "Success Response", type: "main", index: 0 }],
+      [{ node: "Write Cache", type: "main", index: 0 }],
+    ] },
+    "Write Cache": { main: [[{ node: "Success Response", type: "main", index: 0 }]] },
+    "Success Response": { main: [[{ node: "Prepare Send", type: "main", index: 0 }]] },
+    "Prepare Send": { main: [[{ node: "WhatsApp Configured?", type: "main", index: 0 }]] },
+    "WhatsApp Configured?": { main: [
+      [], // true  = skip (no JID configured) -> end
+      [{ node: "Render Image", type: "main", index: 0 }], // false = send
+    ] },
+    "Render Image": { main: [
+      [{ node: "Send to WhatsApp", type: "main", index: 0 }], // success
+      [], // render error -> end quietly
     ] },
   },
   active: false,
@@ -187,5 +261,17 @@ const workflow = {
   pinData: {},
 };
 
+// tidy left-to-right canvas layout
+const POS = {
+  "Webhook UI": [240, 80], "Serve UI": [460, 80],
+  "Webhook Process": [240, 460], "Validate Input": [440, 460], "Is Valid?": [640, 460], "Validation Error": [640, 720],
+  "Check Cache": [840, 460], "Is Cached?": [1040, 460], "Cached Response": [1260, 280],
+  "Download PDF": [1260, 500], "Download Error": [1480, 720], "Prepare Gemini Request": [1480, 500],
+  "Call Gemini API": [1700, 500], "Gemini Call Error": [1920, 720], "Parse Response": [1920, 500],
+  "Parse OK?": [2140, 500], "Extraction Error": [2360, 720], "Write Cache": [2360, 500], "Success Response": [2580, 500],
+  "Prepare Send": [2800, 500], "WhatsApp Configured?": [3020, 500], "Render Image": [3240, 380], "Send to WhatsApp": [3460, 380],
+};
+for (const n of workflow.nodes) if (POS[n.name]) n.position = POS[n.name];
+
 fs.writeFileSync(path.join(ROOT, "workflow.json"), JSON.stringify(workflow, null, 2));
-console.log("✓ Wrote workflow.json (" + workflow.nodes.length + " nodes; serves UI + JSON API)");
+console.log("✓ Wrote workflow.json (" + workflow.nodes.length + " nodes; serves UI + JSON API + cache)");
