@@ -1,18 +1,18 @@
 # ──────────────────────────────────────────────────────────────────────────
 # Niveshaay Financial Results Pipeline
 #
-#   n8n        — the entire pipeline (form + processing + image). Port 5678.
-#   evolution  — WhatsApp gateway (the ONLY external service). Port 8080. Optional.
-#   postgres   — datastore for Evolution only. Port 5434. Optional.
+#   n8n        — the whole app: serves the UI (GET /webhook/ui) AND the JSON API
+#                (POST /webhook/process-pdf). Stock image; no Chromium needed
+#                (the P&L image is rendered in-browser). Port 5678.
+#   evolution  — OPTIONAL WhatsApp gateway (only if you add WhatsApp delivery). 8080.
+#   postgres   — datastore for Evolution only. 5434. Optional.
 #
-# Core usage (form -> Gemini -> JSON):   docker compose up -d n8n
-# With WhatsApp:                          docker compose up -d   (all services)
+# Run:        docker compose up -d n8n      (then import + activate workflow.json)
+# WhatsApp:   docker compose --profile whatsapp up -d   (advanced, see README)
 # ──────────────────────────────────────────────────────────────────────────
 services:
   n8n:
-    build:
-      context: .
-      dockerfile: Dockerfile.n8n
+    image: n8nio/n8n:latest
     container_name: niveshaay_n8n
     restart: unless-stopped
     ports:

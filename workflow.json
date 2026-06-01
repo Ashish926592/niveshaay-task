@@ -1,45 +1,76 @@
 {
   "id": "niveshaayfinres1",
-  "name": "Niveshaay — Automated Financial Results Processor",
+  "name": "Niveshaay — Financial Results Processor (UI + API)",
   "nodes": [
     {
       "parameters": {
-        "path": "process-pdf",
-        "formTitle": "Niveshaay — Corporate Result Processor",
-        "formDescription": "Paste a BSE/NSE corporate result PDF link. The pipeline extracts the consolidated P&L and returns standardized JSON (and, if configured, posts a P&L image to WhatsApp).",
-        "formFields": {
-          "values": [
-            {
-              "fieldLabel": "PDF Link",
-              "fieldType": "text",
-              "placeholder": "https://www.bseindia.com/xml-data/corpfiling/AttachLive/result.pdf",
-              "requiredField": true
-            }
-          ]
-        },
+        "httpMethod": "GET",
+        "path": "ui",
+        "responseMode": "responseNode",
         "options": {}
       },
       "id": "nv-0001",
-      "name": "On form submission",
-      "type": "n8n-nodes-base.formTrigger",
-      "typeVersion": 2.2,
+      "name": "Webhook UI",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
       "position": [
         240,
-        400
+        120
+      ],
+      "webhookId": "ui"
+    },
+    {
+      "parameters": {
+        "respondWith": "text",
+        "responseBody": "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n  <meta charset=\"utf-8\" />\n  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />\n  <title>Niveshaay · Financial Results Processor</title>\n  <link rel=\"preconnect\" href=\"https://fonts.googleapis.com\" />\n  <link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\" rel=\"stylesheet\" />\n  <script src=\"https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js\"></script>\n  <style>\n    :root{\n      --green-900:#0f3d1e; --green-800:#1b5e20; --green-700:#2e7d32; --green-100:#e8f5e9;\n      --ink:#10231a; --muted:#5b6b62; --line:#e3e9e5; --bg:#f5f8f6; --card:#ffffff;\n      --red:#d32f2f; --shadow:0 10px 30px rgba(16,35,26,.08);\n    }\n    *{box-sizing:border-box;margin:0;padding:0}\n    body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}\n    .wrap{max-width:980px;margin:0 auto;padding:0 20px 64px}\n    /* header */\n    header{background:linear-gradient(135deg,var(--green-900),var(--green-700));color:#fff;padding:26px 0 30px;box-shadow:var(--shadow)}\n    .brand{max-width:980px;margin:0 auto;padding:0 20px;display:flex;align-items:center;gap:14px}\n    .logo{width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:22px}\n    .brand h1{font-size:20px;font-weight:800;letter-spacing:.3px}\n    .brand p{font-size:12.5px;color:#cfe8d3;font-weight:500;margin-top:1px}\n    /* card */\n    .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:24px;margin-top:-18px}\n    .panel.lift{margin-top:24px}\n    label.fl{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px}\n    .row{display:flex;gap:10px;flex-wrap:wrap}\n    input[type=url],input[type=text]{flex:1;min-width:240px;padding:13px 14px;border:1.5px solid var(--line);border-radius:11px;font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}\n    input:focus{border-color:var(--green-700);box-shadow:0 0 0 3px var(--green-100)}\n    button{font-family:inherit;cursor:pointer;border:none;border-radius:11px;font-weight:600;font-size:14px;transition:transform .05s,filter .15s,background .15s}\n    button:active{transform:translateY(1px)}\n    .btn-primary{background:var(--green-700);color:#fff;padding:13px 22px}\n    .btn-primary:hover{filter:brightness(1.06)}\n    .btn-primary:disabled{opacity:.6;cursor:not-allowed}\n    .btn-ghost{background:var(--green-100);color:var(--green-800);padding:9px 14px;font-size:13px}\n    .btn-ghost:hover{filter:brightness(.98)}\n    .samples{margin-top:14px;font-size:12.5px;color:var(--muted)}\n    .samples a{color:var(--green-700);text-decoration:none;font-weight:600;cursor:pointer;border-bottom:1px dashed var(--green-100)}\n    .samples a:hover{border-bottom-color:var(--green-700)}\n    .hint{font-size:12px;color:var(--muted);margin-top:10px}\n    /* loading */\n    .loader{display:none;text-align:center;padding:36px 0}\n    .spinner{width:46px;height:46px;border:4px solid var(--green-100);border-top-color:var(--green-700);border-radius:50%;margin:0 auto 16px;animation:spin 1s linear infinite}\n    @keyframes spin{to{transform:rotate(360deg)}}\n    .stage{font-size:14px;font-weight:600;color:var(--green-800)}\n    .stage small{display:block;color:var(--muted);font-weight:500;margin-top:4px}\n    /* result */\n    #result{display:none}\n    .resbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}\n    .company{font-size:19px;font-weight:800}\n    .badge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:4px 10px;border-radius:999px;background:var(--green-100);color:var(--green-800)}\n    .spacer{flex:1}\n    .tabs{display:flex;gap:6px;background:#eef3f0;padding:5px;border-radius:12px;width:fit-content;margin-bottom:16px}\n    .tab{padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);background:transparent}\n    .tab.active{background:#fff;color:var(--green-800);box-shadow:0 1px 4px rgba(0,0,0,.06)}\n    .view{display:none}\n    .view.active{display:block}\n    /* P&L card / table */\n    .pnl{border:1.5px solid var(--green-700);border-radius:12px;overflow:hidden}\n    .pnl-head{background:linear-gradient(135deg,var(--green-800),var(--green-700));color:#fff;padding:14px 18px}\n    .pnl-head .h1{font-size:17px;font-weight:800}\n    .pnl-head .sub{font-size:11.5px;color:#cfe8d3;margin-top:2px}\n    table{width:100%;border-collapse:collapse}\n    thead th{background:var(--green-100);border-bottom:2px solid var(--green-700);padding:10px 14px;font-size:12.5px;font-weight:700;white-space:nowrap;text-align:right}\n    thead th:first-child{text-align:left}\n    tbody td{padding:9px 14px;font-size:12.5px;white-space:nowrap;text-align:right;border-bottom:1px solid var(--line)}\n    tbody td:first-child{text-align:left;color:var(--ink)}\n    tbody tr.hl{background:var(--green-100)}\n    tbody tr.hl td{font-weight:700}\n    tbody tr.sub td:first-child{color:var(--muted);padding-left:26px;font-weight:500}\n    td.neg{color:var(--red)}\n    .pnl-foot{background:#f5f8f6;padding:7px 16px;text-align:right;font-size:10px;color:var(--muted);border-top:1px solid var(--line)}\n    pre{background:#0f2417;color:#cdeccf;border-radius:12px;padding:18px;font-size:12.5px;line-height:1.55;overflow:auto;max-height:520px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}\n    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}\n    /* error */\n    #error{display:none;text-align:center;padding:28px 10px}\n    .err-ico{width:54px;height:54px;border-radius:50%;background:#fdecea;color:var(--red);display:grid;place-items:center;font-size:26px;margin:0 auto 12px}\n    .err-msg{font-size:15px;font-weight:600;color:var(--red);margin-bottom:6px}\n    .err-sub{font-size:13px;color:var(--muted);margin-bottom:18px}\n    .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--green-800);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;box-shadow:var(--shadow)}\n    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}\n    footer{text-align:center;font-size:12px;color:var(--muted);margin-top:28px}\n    footer b{color:var(--green-800)}\n  </style>\n</head>\n<body>\n  <header>\n    <div class=\"brand\">\n      <div class=\"logo\">🌱</div>\n      <div>\n        <h1>NIVESHAAY</h1>\n        <p>Automated Financial Results Processor</p>\n      </div>\n    </div>\n  </header>\n\n  <div class=\"wrap\">\n    <!-- INPUT -->\n    <div class=\"panel\" id=\"input-panel\">\n      <label class=\"fl\" for=\"url\">BSE / NSE corporate result PDF link</label>\n      <div class=\"row\">\n        <input id=\"url\" type=\"url\" placeholder=\"https://www.bseindia.com/xml-data/corpfiling/AttachHis/....pdf\" />\n        <button class=\"btn-primary\" id=\"go\" onclick=\"process()\">Extract P&amp;L →</button>\n      </div>\n      <div class=\"samples\">\n        Try a sample:\n        <a onclick=\"setUrl('https://www.bseindia.com/xml-data/corpfiling/AttachHis/ff349118-9b37-45cf-b26e-fdbcbf36acb4.pdf')\">Timex Group India (Q4 FY26)</a>\n      </div>\n      <div class=\"hint\">Paste a consolidated quarterly result PDF. The pipeline downloads it, extracts the P&amp;L with Gemini, and returns standardized JSON.</div>\n    </div>\n\n    <!-- LOADING -->\n    <div class=\"panel lift loader\" id=\"loader\">\n      <div class=\"spinner\"></div>\n      <div class=\"stage\" id=\"stage\">Processing…<small id=\"stage-sub\">Starting</small></div>\n    </div>\n\n    <!-- RESULT -->\n    <div class=\"panel lift\" id=\"result\">\n      <div class=\"resbar\">\n        <span class=\"company\" id=\"company\">Company</span>\n        <span class=\"badge\" id=\"qbadge\">standard</span>\n        <span class=\"spacer\"></span>\n        <button class=\"btn-ghost\" onclick=\"reset_()\">↺ Process another</button>\n      </div>\n      <div class=\"tabs\">\n        <div class=\"tab active\" data-t=\"table\" onclick=\"tab('table')\">📊 Table</div>\n        <div class=\"tab\" data-t=\"json\" onclick=\"tab('json')\">{ } JSON</div>\n        <div class=\"tab\" data-t=\"image\" onclick=\"tab('image')\">🖼 Image</div>\n      </div>\n\n      <div class=\"view active\" id=\"v-table\"></div>\n\n      <div class=\"view\" id=\"v-json\">\n        <pre id=\"json\"></pre>\n        <div class=\"toolbar\"><button class=\"btn-ghost\" onclick=\"copyJson()\">⧉ Copy JSON</button></div>\n      </div>\n\n      <div class=\"view\" id=\"v-image\">\n        <div id=\"card-wrap\"></div>\n        <div class=\"toolbar\"><button class=\"btn-ghost\" onclick=\"downloadPng()\">⬇ Download PNG</button></div>\n      </div>\n    </div>\n\n    <!-- ERROR -->\n    <div class=\"panel lift\" id=\"error\">\n      <div class=\"err-ico\">!</div>\n      <div class=\"err-msg\" id=\"err-msg\">Something went wrong</div>\n      <div class=\"err-sub\" id=\"err-sub\"></div>\n      <button class=\"btn-primary\" onclick=\"reset_()\">Try again</button>\n    </div>\n\n    <footer>Built fully in <b>n8n</b> · Gemini 2.5 Flash · UI served by n8n</footer>\n  </div>\n\n  <div class=\"toast\" id=\"toast\"></div>\n\n  <script>\n    var lastData = null;\n    var $ = function(id){ return document.getElementById(id); };\n    function setUrl(u){ $('url').value = u; $('url').focus(); }\n    function show(id){ ['input-panel','loader','result','error'].forEach(function(x){ $(x).style.display = (x===id?'block':'none'); }); }\n    function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},1800); }\n\n    function tab(name){\n      ['table','json','image'].forEach(function(n){\n        document.querySelector('.tab[data-t=\"'+n+'\"]').classList.toggle('active', n===name);\n        $('v-'+n).classList.toggle('active', n===name);\n      });\n    }\n\n    var HL = ['revenue','gross profit','ebitda','total expenses','profit before tax','profit/loss before tax','pat','eps'];\n    function isHl(label){ var l=(label||'').toLowerCase(); return HL.some(function(k){ return l===k || l.indexOf(k)===0; }) || l.indexOf('ebitda')>-1 || l==='revenue'; }\n    function isNeg(v){ if(!v) return false; var c=String(v).replace(/[%,]/g,'').trim(); return !isNaN(parseFloat(c)) && parseFloat(c)<0; }\n\n    function rowsOf(data){ var r=[],i=1; while(data['row'+i]){ if(Array.isArray(data['row'+i])) r.push(data['row'+i].map(function(x){return x==null?'':String(x);})); i++; } return r; }\n\n    function buildTable(data){\n      var rows = rowsOf(data); if(!rows.length) return '<p>No rows.</p>';\n      var head = rows[0], body = rows.slice(1);\n      var th = head.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join('');\n      var tr = body.map(function(r){\n        var label=r[0]||'', blank = r.slice(1).every(function(c){return c==='';});\n        var cls = isHl(label)?'hl':(blank?'sub':'');\n        var tds = r.map(function(c,idx){ var neg=(idx>0&&isNeg(c))?' class=\"neg\"':''; return '<td'+neg+'>'+esc(c)+'</td>'; }).join('');\n        return '<tr class=\"'+cls+'\">'+tds+'</tr>';\n      }).join('');\n      return '<table><thead><tr>'+th+'</tr></thead><tbody>'+tr+'</tbody></table>';\n    }\n\n    function buildCard(data){\n      var qt = data.quarter_type==='extended'?'Extended (Q2/Q4)':'Standard (Q1/Q3)';\n      return '<div class=\"pnl\" id=\"pnl-card\"><div class=\"pnl-head\"><div class=\"h1\">'+esc(data.company_name||'Unknown Company')+\n        '</div><div class=\"sub\">Quarterly Financial Results — '+qt+' · All values in ₹ Crores</div></div>'+\n        buildTable(data)+'<div class=\"pnl-foot\">Generated by Niveshaay Financial Results Processor</div></div>';\n    }\n\n    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;'); }\n\n    function render(data){\n      lastData = data;\n      $('company').textContent = data.company_name || 'Unknown Company';\n      $('qbadge').textContent = data.quarter_type || '—';\n      $('v-table').innerHTML = '<div class=\"pnl\">'+'<div class=\"pnl-head\"><div class=\"h1\">'+esc(data.company_name||'')+'</div><div class=\"sub\">All values in ₹ Crores</div></div>'+buildTable(data)+'</div>';\n      $('json').textContent = JSON.stringify(data, null, 2);\n      $('card-wrap').innerHTML = buildCard(data);\n      tab('table');\n      show('result');\n    }\n\n    function copyJson(){\n      navigator.clipboard.writeText(JSON.stringify(lastData, null, 2)).then(function(){ toast('JSON copied ✓'); },\n        function(){ toast('Copy failed'); });\n    }\n\n    function downloadPng(){\n      var el = $('pnl-card'); if(!el || !window.html2canvas){ toast('Image lib not loaded'); return; }\n      html2canvas(el, {scale:2, backgroundColor:'#ffffff'}).then(function(canvas){\n        var a=document.createElement('a');\n        a.download = ((lastData&&lastData.company_name)||'pnl').replace(/[^a-z0-9]+/gi,'_')+'.png';\n        a.href = canvas.toDataURL('image/png'); a.click(); toast('Image downloaded ✓');\n      });\n    }\n\n    function reset_(){ $('url').value=''; show('input-panel'); $('url').focus(); }\n\n    var STAGES = [[0,'Downloading PDF…','Fetching the document from BSE/NSE'],[1,'Extracting with Gemini…','Reading the consolidated P&L (this takes ~30–60s)'],[2,'Building result…','Formatting the standardized JSON']];\n    var stageTimer=null;\n    function runStages(){ var i=0; $('stage').firstChild.textContent=STAGES[0][1]; $('stage-sub').textContent=STAGES[0][2];\n      stageTimer=setInterval(function(){ i=Math.min(i+1,STAGES.length-1); $('stage').firstChild.textContent=STAGES[i][1]; $('stage-sub').textContent=STAGES[i][2]; }, 9000); }\n    function stopStages(){ if(stageTimer) clearInterval(stageTimer); stageTimer=null; }\n\n    function process(){\n      var url = $('url').value.trim();\n      if(!url){ toast('Please paste a PDF link'); $('url').focus(); return; }\n      $('go').disabled = true; show('loader'); runStages();\n      fetch('/webhook/process-pdf', {\n        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pdfUrl: url })\n      }).then(function(res){ return res.json().then(function(j){ return {ok:res.ok, status:res.status, j:j}; }); })\n      .then(function(r){\n        stopStages(); $('go').disabled = false;\n        if(r.j && r.j.success && r.j.data){ render(r.j.data); }\n        else { showError((r.j && (r.j.error||r.j.message)) || ('Request failed ('+r.status+')')); }\n      }).catch(function(e){ stopStages(); $('go').disabled=false; showError('Network error — is the n8n workflow active? '+e.message); });\n    }\n\n    function showError(msg){\n      $('err-msg').textContent = msg;\n      $('err-sub').textContent = 'Check the link is a valid https PDF, or try another filing.';\n      show('error');\n    }\n\n    // submit on Enter\n    document.addEventListener('keydown', function(e){ if(e.key==='Enter' && document.activeElement===$('url')) process(); });\n  </script>\n</body>\n</html>\n",
+        "options": {
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "text/html; charset=utf-8"
+              }
+            ]
+          }
+        }
+      },
+      "id": "nv-0002",
+      "name": "Serve UI",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        460,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "process-pdf",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "nv-0003",
+      "name": "Webhook Process",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        240,
+        420
       ],
       "webhookId": "process-pdf"
     },
     {
       "parameters": {
-        "jsCode": "const pdfUrl = String($input.first().json[\"PDF Link\"] || \"\").trim();\nif (!pdfUrl) {\n  return [{ json: { error: true, message: \"PDF URL is required\" } }];\n}\nif (!pdfUrl.startsWith(\"https://\")) {\n  return [{ json: { error: true, message: \"URL must start with https://\" } }];\n}\nif (!pdfUrl.toLowerCase().includes(\".pdf\")) {\n  return [{ json: { error: true, message: \"URL must point to a PDF file (.pdf)\" } }];\n}\nreturn [{ json: { pdfUrl, error: false } }];"
+        "jsCode": "const b = $input.first().json.body || $input.first().json;\nconst pdfUrl = String((b && b.pdfUrl) || \"\").trim();\nif (!pdfUrl) return [{ json: { error: true, message: \"PDF URL is required\", statusCode: 400 } }];\nif (!pdfUrl.startsWith(\"https://\")) return [{ json: { error: true, message: \"URL must start with https://\", statusCode: 400 } }];\nif (!pdfUrl.toLowerCase().includes(\".pdf\")) return [{ json: { error: true, message: \"URL must point to a PDF file (.pdf)\", statusCode: 400 } }];\nreturn [{ json: { pdfUrl, error: false } }];"
       },
-      "id": "nv-0002",
+      "id": "nv-0004",
       "name": "Validate Input",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         460,
-        400
+        420
       ]
     },
     {
@@ -52,7 +83,7 @@
           },
           "conditions": [
             {
-              "id": "cond",
+              "id": "c",
               "leftValue": "={{ $json.error }}",
               "rightValue": "true",
               "operator": {
@@ -66,29 +97,38 @@
         },
         "options": {}
       },
-      "id": "nv-0003",
+      "id": "nv-0005",
       "name": "Is Valid?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
         680,
-        400
+        420
       ]
     },
     {
       "parameters": {
-        "operation": "completion",
-        "completionTitle": "⚠ Invalid input",
-        "completionMessage": "={{ $json.message || 'Invalid request.' }}",
-        "options": {}
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: $json.message || \"Invalid request\" }) }}",
+        "options": {
+          "responseCode": "={{ $json.statusCode || 400 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
       },
-      "id": "nv-0004",
-      "name": "Invalid Input",
-      "type": "n8n-nodes-base.form",
-      "typeVersion": 1,
+      "id": "nv-0006",
+      "name": "Validation Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
       "position": [
         900,
-        560
+        580
       ]
     },
     {
@@ -116,43 +156,52 @@
           "timeout": 30000
         }
       },
-      "id": "nv-0005",
+      "id": "nv-0007",
       "name": "Download PDF",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         900,
-        340
+        420
       ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "operation": "completion",
-        "completionTitle": "⚠ Download failed",
-        "completionMessage": "Failed to download the PDF. The link may be invalid, expired, or blocked. Please check the URL and try again.",
-        "options": {}
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: \"Failed to download the PDF. The link may be invalid, expired, or blocked.\" }) }}",
+        "options": {
+          "responseCode": 502,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
       },
-      "id": "nv-0006",
+      "id": "nv-0008",
       "name": "Download Error",
-      "type": "n8n-nodes-base.form",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
       "position": [
         1120,
-        540
+        600
       ]
     },
     {
       "parameters": {
-        "jsCode": "const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst base64Pdf = binaryDataBuffer.toString('base64');\n\nconst PROMPT = \"You are a financial data processor that converts quarterly P&L statements into standardized JSON format. You are only to look at the consolidated financial results.\\n\\nThe table can be under any form including but not limited 'FINANCIAL RESULTS FOR THE QUARTER / YEAR ENDED', 'STATEMENT OF AUDITED/UNAUDITED CONSOLIDATED FINANCIAL RESULTS FOR THE HALF YEAR ENDED AND YEAR ENDED MARCH', 'CONSOLIDATED FINANCIAL RESULTS FOR THE QUARTER', 'Profit and Loss statement', 'PnL', 'Statement of Audited Financial Results for the Half Year & Year ended' and so on.\\n\\nCritical: Look and process the standalone statement only and only if consolidated statement is not present.\\n\\nImportant: If you don't find the profit and loss statement in the document just output no pnl found and nothing else.\\n\\n## 1. DATA EXTRACTION RULES\\n\\nCompany Name Extraction\\n1. Identify: Look for legal entity markers (\\\"Limited\\\", \\\"Ltd\\\", \\\"Pvt\\\", \\\"Inc\\\").\\n2. Formatting:\\n   - Use Title Case for names (e.g., \\\"Tata Motors\\\").\\n   - Keep acronyms ALL CAPS (e.g., \\\"ITC Limited\\\", \\\"H.G. Infra\\\").\\n   - If no name is found, output: \\\"Unknown Company\\\"\\n\\n## OUTPUT FORMAT (STRICT)\\n\\nReturn ONLY valid JSON with no explanations.\\n\\n### CRITICAL: Column count depends on the quarter type:\\n\\nFor Q1 and Q3 - output 4 columns per row (Particulars + 3 data columns):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"standard\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q1 FY26\\\", \\\"Q4 FY25\\\", \\\"Q1 FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"3611.02\\\", \\\"3347.70\\\", \\\"4132.67\\\"],\\n  ...\\n}\\n\\nFor Q2 - output 6 columns per row (Particulars + 5 data columns, adding H1 of current and previous year):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"extended\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q2 FY26\\\", \\\"Q1 FY26\\\", \\\"Q2 FY25\\\", \\\"H1 FY26\\\", \\\"H1 FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"450.50\\\", \\\"425.30\\\", \\\"380.20\\\", \\\"875.80\\\", \\\"740.50\\\"],\\n  ...\\n}\\n\\nFor Q4 - output 6 columns per row (Particulars + 5 data columns, adding full year current and previous year):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"extended\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q4 FY26\\\", \\\"Q3 FY26\\\", \\\"Q4 FY25\\\", \\\"FY26\\\", \\\"FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"450.50\\\", \\\"425.30\\\", \\\"380.20\\\", \\\"1800.00\\\", \\\"1650.00\\\"],\\n  ...\\n}\\n\\n## TABLE STRUCTURE\\n\\n### Column Headers\\n- Column 1: \\\"Particulars\\\"\\n- Column 2: Most recent quarter\\n- Column 3: Previous consecutive quarter\\n- Column 4: Same quarter from previous year\\n- Column 5 (Q2/Q4 only): H1 current year (Q2) OR Full Year current (Q4)\\n- Column 6 (Q2/Q4 only): H1 previous year (Q2) OR Full Year previous (Q4)\\n\\n### Quarter Naming Convention\\n- 30-Jun-25 -> Q1 FY26\\n- 30-Sep-25 -> Q2 FY26\\n- 31-Dec-25 -> Q3 FY26\\n- 31-Mar-26 -> Q4 FY26\\n\\n### Row Order (Standard P&L)\\n1. Revenue\\n2. Expenses (leave values blank - heading only)\\n3. [Expense line items - varies by company]\\n4. Gross Profit*\\n5. Gross Profit Margin*\\n6. Employee Benefit Expense\\n7. [Other operating expenses - varies]\\n8. Other expenses\\n9. Total Expenses*\\n10. EBITDA*\\n11. EBITDA Margin*\\n12. Depreciation\\n13. Finance Cost\\n14. Profit before Exceptional Items, Other Income*\\n15. Other Income\\n16. [Exceptional items - if present]\\n17. [Share of profit/loss in JV/Associate - if present]\\n18. Profit/Loss Before Tax*\\n19. Tax Expenses\\n20. PAT*\\n21. PAT Margin*\\n22. EPS (Basic)\\n\\n*Calculated if missing\\n\\nYou are required to look at the given data and intelligently add or remove fields.\\n\\nNote:\\n1. Service charges/Service Cost are not included in the gross profit calculation.\\n2. Revenue is revenue from operations and not total revenue.\\n3. If excise duty is present then there will be a net revenue = revenue - excise duty.\\n4. Make sure that the values you pick and output are of the correct quarters.\\n\\n## CALCULATION FORMULAS\\n\\nGross Profit = Revenue - COGS-type expenses\\nGross Profit Margin = (Gross Profit / Revenue) x 100\\nTotal Expenses = Sum of all expense line items (excluding Depreciation and Finance Cost)\\nEBITDA = Revenue - Total Operating Expenses (excluding Depreciation, Finance Cost and other income)\\nEBITDA Margin = (EBITDA / Revenue) x 100\\nProfit before Exceptional Items, Other Income = EBITDA - Depreciation - Finance Cost\\nProfit Before Tax = EBITDA - Depreciation - Finance Cost + Other Income +/- Exceptional items +/- Share of profit/loss in JV\\nPAT = Profit Before Tax - Tax Expenses\\nPAT Margin = (PAT / Revenue) x 100\\nEPS (Basic) = Use provided value only; do not calculate\\n\\nFor Q2 and Q4, apply the same calculation formulas to the H1/FY columns.\\n\\n## DATA PROCESSING RULES\\n- Convert ALL values to Rs Crores\\n- Round to 2 decimal places\\n- Treat \\\"-\\\" or null as 0 (except for EPS)\\n- Add \\\"%\\\" suffix to all margin calculations\\n- All numeric values must be strings in JSON\\n- Verify all calculations before final output\";\n\nconst requestBody = {\n  contents: [\n    {\n      parts: [\n        { inline_data: { mime_type: \"application/pdf\", data: base64Pdf } },\n        { text: PROMPT }\n      ]\n    }\n  ]\n};\n\nreturn [{ json: { requestBody } }];"
+        "jsCode": "const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst base64Pdf = binaryDataBuffer.toString('base64');\nconst PROMPT = \"You are a financial data processor that converts quarterly P&L statements into standardized JSON format. You are only to look at the consolidated financial results.\\n\\nThe table can be under any form including but not limited 'FINANCIAL RESULTS FOR THE QUARTER / YEAR ENDED', 'STATEMENT OF AUDITED/UNAUDITED CONSOLIDATED FINANCIAL RESULTS FOR THE HALF YEAR ENDED AND YEAR ENDED MARCH', 'CONSOLIDATED FINANCIAL RESULTS FOR THE QUARTER', 'Profit and Loss statement', 'PnL', 'Statement of Audited Financial Results for the Half Year & Year ended' and so on.\\n\\nCritical: Look and process the standalone statement only and only if consolidated statement is not present.\\n\\nImportant: If you don't find the profit and loss statement in the document just output no pnl found and nothing else.\\n\\n## 1. DATA EXTRACTION RULES\\n\\nCompany Name Extraction\\n1. Identify: Look for legal entity markers (\\\"Limited\\\", \\\"Ltd\\\", \\\"Pvt\\\", \\\"Inc\\\").\\n2. Formatting:\\n   - Use Title Case for names (e.g., \\\"Tata Motors\\\").\\n   - Keep acronyms ALL CAPS (e.g., \\\"ITC Limited\\\", \\\"H.G. Infra\\\").\\n   - If no name is found, output: \\\"Unknown Company\\\"\\n\\n## OUTPUT FORMAT (STRICT)\\n\\nReturn ONLY valid JSON with no explanations.\\n\\n### CRITICAL: Column count depends on the quarter type:\\n\\nFor Q1 and Q3 - output 4 columns per row (Particulars + 3 data columns):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"standard\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q1 FY26\\\", \\\"Q4 FY25\\\", \\\"Q1 FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"3611.02\\\", \\\"3347.70\\\", \\\"4132.67\\\"],\\n  ...\\n}\\n\\nFor Q2 - output 6 columns per row (Particulars + 5 data columns, adding H1 of current and previous year):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"extended\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q2 FY26\\\", \\\"Q1 FY26\\\", \\\"Q2 FY25\\\", \\\"H1 FY26\\\", \\\"H1 FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"450.50\\\", \\\"425.30\\\", \\\"380.20\\\", \\\"875.80\\\", \\\"740.50\\\"],\\n  ...\\n}\\n\\nFor Q4 - output 6 columns per row (Particulars + 5 data columns, adding full year current and previous year):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"extended\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q4 FY26\\\", \\\"Q3 FY26\\\", \\\"Q4 FY25\\\", \\\"FY26\\\", \\\"FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"450.50\\\", \\\"425.30\\\", \\\"380.20\\\", \\\"1800.00\\\", \\\"1650.00\\\"],\\n  ...\\n}\\n\\n## TABLE STRUCTURE\\n\\n### Column Headers\\n- Column 1: \\\"Particulars\\\"\\n- Column 2: Most recent quarter\\n- Column 3: Previous consecutive quarter\\n- Column 4: Same quarter from previous year\\n- Column 5 (Q2/Q4 only): H1 current year (Q2) OR Full Year current (Q4)\\n- Column 6 (Q2/Q4 only): H1 previous year (Q2) OR Full Year previous (Q4)\\n\\n### Quarter Naming Convention\\n- 30-Jun-25 -> Q1 FY26\\n- 30-Sep-25 -> Q2 FY26\\n- 31-Dec-25 -> Q3 FY26\\n- 31-Mar-26 -> Q4 FY26\\n\\n### Row Order (Standard P&L)\\n1. Revenue\\n2. Expenses (leave values blank - heading only)\\n3. [Expense line items - varies by company]\\n4. Gross Profit*\\n5. Gross Profit Margin*\\n6. Employee Benefit Expense\\n7. [Other operating expenses - varies]\\n8. Other expenses\\n9. Total Expenses*\\n10. EBITDA*\\n11. EBITDA Margin*\\n12. Depreciation\\n13. Finance Cost\\n14. Profit before Exceptional Items, Other Income*\\n15. Other Income\\n16. [Exceptional items - if present]\\n17. [Share of profit/loss in JV/Associate - if present]\\n18. Profit/Loss Before Tax*\\n19. Tax Expenses\\n20. PAT*\\n21. PAT Margin*\\n22. EPS (Basic)\\n\\n*Calculated if missing\\n\\nYou are required to look at the given data and intelligently add or remove fields.\\n\\nNote:\\n1. Service charges/Service Cost are not included in the gross profit calculation.\\n2. Revenue is revenue from operations and not total revenue.\\n3. If excise duty is present then there will be a net revenue = revenue - excise duty.\\n4. Make sure that the values you pick and output are of the correct quarters.\\n\\n## CALCULATION FORMULAS\\n\\nGross Profit = Revenue - COGS-type expenses\\nGross Profit Margin = (Gross Profit / Revenue) x 100\\nTotal Expenses = Sum of all expense line items (excluding Depreciation and Finance Cost)\\nEBITDA = Revenue - Total Operating Expenses (excluding Depreciation, Finance Cost and other income)\\nEBITDA Margin = (EBITDA / Revenue) x 100\\nProfit before Exceptional Items, Other Income = EBITDA - Depreciation - Finance Cost\\nProfit Before Tax = EBITDA - Depreciation - Finance Cost + Other Income +/- Exceptional items +/- Share of profit/loss in JV\\nPAT = Profit Before Tax - Tax Expenses\\nPAT Margin = (PAT / Revenue) x 100\\nEPS (Basic) = Use provided value only; do not calculate\\n\\nFor Q2 and Q4, apply the same calculation formulas to the H1/FY columns.\\n\\n## DATA PROCESSING RULES\\n- Convert ALL values to Rs Crores\\n- Round to 2 decimal places\\n- Treat \\\"-\\\" or null as 0 (except for EPS)\\n- Add \\\"%\\\" suffix to all margin calculations\\n- All numeric values must be strings in JSON\\n- Verify all calculations before final output\";\nconst requestBody = { contents: [ { parts: [ { inline_data: { mime_type: \"application/pdf\", data: base64Pdf } }, { text: PROMPT } ] } ] };\nreturn [{ json: { requestBody } }];"
       },
-      "id": "nv-0007",
+      "id": "nv-0009",
       "name": "Prepare Gemini Request",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1120,
-        340
+        420
       ]
     },
     {
@@ -166,43 +215,52 @@
           "timeout": 120000
         }
       },
-      "id": "nv-0008",
+      "id": "nv-0010",
       "name": "Call Gemini API",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
       "position": [
         1340,
-        340
+        420
       ],
       "onError": "continueErrorOutput"
     },
     {
       "parameters": {
-        "operation": "completion",
-        "completionTitle": "⚠ Gemini API error",
-        "completionMessage": "The Gemini API call failed. Please verify the GEMINI_API_KEY and quota, then try again.",
-        "options": {}
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: \"Gemini API call failed. Verify GEMINI_API_KEY and quota.\" }) }}",
+        "options": {
+          "responseCode": 502,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
       },
-      "id": "nv-0009",
+      "id": "nv-0011",
       "name": "Gemini Call Error",
-      "type": "n8n-nodes-base.form",
-      "typeVersion": 1,
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
       "position": [
         1560,
-        540
+        600
       ]
     },
     {
       "parameters": {
-        "jsCode": "const response = $input.first().json;\nconst candidates = response.candidates;\nif (!candidates || candidates.length === 0) {\n  return [{ json: { error: true, message: \"No response from Gemini.\" } }];\n}\n\nlet responseText = candidates[0].content?.parts?.[0]?.text || \"\";\n\nif (responseText.trim().toLowerCase().includes(\"no pnl found\")) {\n  return [{ json: { error: true, message: \"No P&L statement found in this PDF.\" } }];\n}\n\n// Strip markdown code fences without using backtick literals\nlet cleaned = responseText.trim();\nconst fence = String.fromCharCode(96, 96, 96);\nif (cleaned.startsWith(fence + \"json\")) {\n  cleaned = cleaned.slice(7);\n} else if (cleaned.startsWith(fence)) {\n  cleaned = cleaned.slice(3);\n}\nif (cleaned.endsWith(fence)) {\n  cleaned = cleaned.slice(0, -3);\n}\ncleaned = cleaned.trim();\n\nlet parsedData;\ntry {\n  parsedData = JSON.parse(cleaned);\n} catch (e) {\n  return [{ json: { error: true, message: \"Failed to parse the Gemini response as JSON.\" } }];\n}\n\nreturn [{ json: { error: false, data: parsedData } }];"
+        "jsCode": "const response = $input.first().json;\nconst candidates = response.candidates;\nif (!candidates || candidates.length === 0) return [{ json: { error: true, message: \"No response from Gemini.\", statusCode: 502 } }];\nlet responseText = candidates[0].content?.parts?.[0]?.text || \"\";\nif (responseText.trim().toLowerCase().includes(\"no pnl found\")) return [{ json: { error: true, message: \"No P&L statement found in this PDF.\", statusCode: 400 } }];\nlet cleaned = responseText.trim();\nconst fence = String.fromCharCode(96, 96, 96);\nif (cleaned.startsWith(fence + \"json\")) cleaned = cleaned.slice(7);\nelse if (cleaned.startsWith(fence)) cleaned = cleaned.slice(3);\nif (cleaned.endsWith(fence)) cleaned = cleaned.slice(0, -3);\ncleaned = cleaned.trim();\nlet parsedData;\ntry { parsedData = JSON.parse(cleaned); }\ncatch (e) { return [{ json: { error: true, message: \"Failed to parse the Gemini response as JSON.\", statusCode: 502 } }]; }\nreturn [{ json: { error: false, data: parsedData } }];"
       },
-      "id": "nv-0010",
+      "id": "nv-0012",
       "name": "Parse Response",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
         1560,
-        340
+        420
       ]
     },
     {
@@ -215,7 +273,7 @@
           },
           "conditions": [
             {
-              "id": "cond",
+              "id": "c",
               "leftValue": "={{ $json.error }}",
               "rightValue": "true",
               "operator": {
@@ -229,172 +287,79 @@
         },
         "options": {}
       },
-      "id": "nv-0011",
+      "id": "nv-0013",
       "name": "Parse OK?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2,
       "position": [
         1780,
-        340
+        420
       ]
     },
     {
       "parameters": {
-        "operation": "completion",
-        "completionTitle": "⚠ Could not extract P&L",
-        "completionMessage": "={{ $json.message || 'Extraction failed.' }}",
-        "options": {}
-      },
-      "id": "nv-0012",
-      "name": "Extraction Error",
-      "type": "n8n-nodes-base.form",
-      "typeVersion": 1,
-      "position": [
-        2000,
-        540
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $input.first().json.data;\nconst groupJid = String($env.WHATSAPP_GROUP_JID || \"\").trim();\n// skip the image/WhatsApp branch entirely when no group JID is configured\nreturn [{ json: { data, skip: !groupJid } }];"
-      },
-      "id": "nv-0013",
-      "name": "Prepare Image Payload",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2000,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "loose"
-          },
-          "conditions": [
-            {
-              "id": "cond",
-              "leftValue": "={{ $json.skip }}",
-              "rightValue": "true",
-              "operator": {
-                "type": "boolean",
-                "operation": "equals",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "id": "nv-0014",
-      "name": "WhatsApp Configured?",
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2,
-      "position": [
-        2220,
-        300
-      ]
-    },
-    {
-      "parameters": {
-        "jsCode": "const data = $json.data || {};\nconst companyName = data.company_name || \"Unknown Company\";\nconst quarterType = data.quarter_type === \"extended\" ? \"Extended (Q2/Q4)\" : \"Standard (Q1/Q3)\";\nconst esc = (s) => String(s == null ? \"\" : s).replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\").replace(/\"/g, \"&quot;\");\n\nconst rows = [];\nlet i = 1;\nwhile (data[\"row\" + i]) {\n  if (Array.isArray(data[\"row\" + i])) rows.push(data[\"row\" + i].map((v) => String(v == null ? \"\" : v)));\n  i++;\n}\nconst header = rows[0] || [];\nconst body = rows.slice(1);\n\nconst isHi = (l) => { l = (l || \"\").toLowerCase(); return l.includes(\"ebitda\") || l.includes(\"profit\") || l.includes(\"pat\") || l.includes(\"revenue\") || l.includes(\"total expenses\") || l.includes(\"eps\"); };\nconst isNeg = (v) => { if (!v) return false; const c = v.replace(/[%,]/g, \"\").trim(); return !isNaN(parseFloat(c)) && parseFloat(c) < 0; };\n\nconst th = header.map((h) => '<th style=\"padding:10px 16px;text-align:' + (h === \"Particulars\" ? \"left\" : \"right\") + ';white-space:nowrap;font-weight:600;font-size:13px;\">' + esc(h) + '</th>').join(\"\");\nconst tr = body.map((r) => {\n  const label = r[0] || \"\";\n  const hi = isHi(label);\n  const bg = hi ? \"background-color:#e8f5e9;\" : \"\";\n  const fw = hi ? \"font-weight:600;\" : \"font-weight:400;\";\n  const tds = r.map((c, idx) => {\n    const al = idx === 0 ? \"left\" : \"right\";\n    const col = idx > 0 && isNeg(c) ? \"color:#d32f2f;\" : \"color:#1a1a1a;\";\n    return '<td style=\"padding:8px 16px;text-align:' + al + ';' + fw + col + 'font-size:13px;white-space:nowrap;\">' + esc(c) + '</td>';\n  }).join(\"\");\n  return '<tr style=\"' + bg + 'border-bottom:1px solid #e0e0e0;\">' + tds + '</tr>';\n}).join(\"\");\n\nconst html = [\n  '<!DOCTYPE html><html><head><meta charset=\"utf-8\"/>',\n  '<style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: Segoe UI, Arial, sans-serif; background:#fff; padding:20px; } .container { max-width:1100px; border:2px solid #2e7d32; border-radius:8px; overflow:hidden; } .header { background:linear-gradient(135deg,#1b5e20,#2e7d32); padding:16px 20px; } .header h1 { color:#fff; font-size:20px; font-weight:700; } .header .subtitle { color:#c8e6c9; font-size:12px; margin-top:4px; } table { width:100%; border-collapse:collapse; } thead { background:#e8f5e9; } thead th { border-bottom:2px solid #2e7d32; } .footer { background:#f5f5f5; padding:8px 20px; text-align:right; font-size:10px; color:#888; border-top:1px solid #e0e0e0; }</style>',\n  '</head><body><div class=\"container\"><div class=\"header\"><h1>' + esc(companyName) + '</h1><div class=\"subtitle\">Quarterly Financial Results — ' + esc(quarterType) + ' | All values in Rs. Crores</div></div>',\n  '<table><thead><tr>' + th + '</tr></thead><tbody>' + tr + '</tbody></table>',\n  '<div class=\"footer\">Generated by Niveshaay Financial Results Processor</div></div></body></html>'\n].join(\"\");\n\nconst dataUrl = \"data:text/html;charset=utf-8;base64,\" + Buffer.from(html, \"utf-8\").toString(\"base64\");\nreturn [{ json: { data, html, dataUrl } }];"
-      },
-      "id": "nv-0015",
-      "name": "Build P&L HTML",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2220,
-        160
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "getScreenshot",
-        "url": "={{ $json.dataUrl }}",
-        "fullPage": true,
-        "output": "binary",
-        "binaryProperty": "data",
-        "imageType": "png",
-        "options": {}
-      },
-      "id": "nv-0016",
-      "name": "Render PNG",
-      "type": "n8n-nodes-puppeteer.puppeteer",
-      "typeVersion": 1,
-      "position": [
-        2440,
-        160
-      ],
-      "onError": "continueErrorOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: { base64: buf.toString('base64') } }];"
-      },
-      "id": "nv-0017",
-      "name": "Image to Base64",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2660,
-        160
-      ]
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "={{ $env.EVOLUTION_API_URL + \"/message/sendMedia/\" + $env.EVOLUTION_INSTANCE }}",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{ $env.EVOLUTION_API_KEY }}"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: \"image\", mimetype: \"image/png\", media: $json.base64, fileName: \"financial_results.png\", caption: \"P&L Results: \" + ($('Prepare Image Payload').first().json.data.company_name || \"\") }) }}",
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ error: $json.message || \"Extraction failed\" }) }}",
         "options": {
-          "timeout": 30000
+          "responseCode": "={{ $json.statusCode || 502 }}",
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
         }
       },
-      "id": "nv-0018",
-      "name": "Send to WhatsApp",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "nv-0014",
+      "name": "Extraction Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
       "position": [
-        2880,
-        160
-      ],
-      "onError": "continueErrorOutput"
+        2000,
+        600
+      ]
     },
     {
       "parameters": {
-        "operation": "completion",
-        "completionTitle": "={{ '✓ ' + ($('Parse Response').first().json.data.company_name || 'Result') + ' — ' + ($('Parse Response').first().json.data.quarter_type || '') }}",
-        "completionMessage": "={{ JSON.stringify($('Parse Response').first().json.data, null, 2) }}",
-        "options": {}
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, data: $json.data }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Access-Control-Allow-Origin",
+                "value": "*"
+              }
+            ]
+          }
+        }
       },
-      "id": "nv-0019",
-      "name": "Success",
-      "type": "n8n-nodes-base.form",
-      "typeVersion": 1,
+      "id": "nv-0015",
+      "name": "Success Response",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
       "position": [
-        2660,
-        360
+        2000,
+        420
       ]
     }
   ],
   "connections": {
-    "On form submission": {
+    "Webhook UI": {
+      "main": [
+        [
+          {
+            "node": "Serve UI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Process": {
       "main": [
         [
           {
@@ -420,7 +385,7 @@
       "main": [
         [
           {
-            "node": "Invalid Input",
+            "node": "Validation Error",
             "type": "main",
             "index": 0
           }
@@ -503,94 +468,7 @@
         ],
         [
           {
-            "node": "Prepare Image Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Prepare Image Payload": {
-      "main": [
-        [
-          {
-            "node": "WhatsApp Configured?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "WhatsApp Configured?": {
-      "main": [
-        [
-          {
-            "node": "Success",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Build P&L HTML",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build P&L HTML": {
-      "main": [
-        [
-          {
-            "node": "Render PNG",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Render PNG": {
-      "main": [
-        [
-          {
-            "node": "Image to Base64",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Success",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Image to Base64": {
-      "main": [
-        [
-          {
-            "node": "Send to WhatsApp",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Send to WhatsApp": {
-      "main": [
-        [
-          {
-            "node": "Success",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Success",
+            "node": "Success Response",
             "type": "main",
             "index": 0
           }

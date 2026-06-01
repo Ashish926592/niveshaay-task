@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Niveshaay · Financial Results Processor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <style>
+    :root{
+      --green-900:#0f3d1e; --green-800:#1b5e20; --green-700:#2e7d32; --green-100:#e8f5e9;
+      --ink:#10231a; --muted:#5b6b62; --line:#e3e9e5; --bg:#f5f8f6; --card:#ffffff;
+      --red:#d32f2f; --shadow:0 10px 30px rgba(16,35,26,.08);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:Inter,system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;-webkit-font-smoothing:antialiased}
+    .wrap{max-width:980px;margin:0 auto;padding:0 20px 64px}
+    /* header */
+    header{background:linear-gradient(135deg,var(--green-900),var(--green-700));color:#fff;padding:26px 0 30px;box-shadow:var(--shadow)}
+    .brand{max-width:980px;margin:0 auto;padding:0 20px;display:flex;align-items:center;gap:14px}
+    .logo{width:42px;height:42px;border-radius:11px;background:rgba(255,255,255,.16);display:grid;place-items:center;font-size:22px}
+    .brand h1{font-size:20px;font-weight:800;letter-spacing:.3px}
+    .brand p{font-size:12.5px;color:#cfe8d3;font-weight:500;margin-top:1px}
+    /* card */
+    .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:24px;margin-top:-18px}
+    .panel.lift{margin-top:24px}
+    label.fl{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px}
+    .row{display:flex;gap:10px;flex-wrap:wrap}
+    input[type=url],input[type=text]{flex:1;min-width:240px;padding:13px 14px;border:1.5px solid var(--line);border-radius:11px;font-size:14px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+    input:focus{border-color:var(--green-700);box-shadow:0 0 0 3px var(--green-100)}
+    button{font-family:inherit;cursor:pointer;border:none;border-radius:11px;font-weight:600;font-size:14px;transition:transform .05s,filter .15s,background .15s}
+    button:active{transform:translateY(1px)}
+    .btn-primary{background:var(--green-700);color:#fff;padding:13px 22px}
+    .btn-primary:hover{filter:brightness(1.06)}
+    .btn-primary:disabled{opacity:.6;cursor:not-allowed}
+    .btn-ghost{background:var(--green-100);color:var(--green-800);padding:9px 14px;font-size:13px}
+    .btn-ghost:hover{filter:brightness(.98)}
+    .samples{margin-top:14px;font-size:12.5px;color:var(--muted)}
+    .samples a{color:var(--green-700);text-decoration:none;font-weight:600;cursor:pointer;border-bottom:1px dashed var(--green-100)}
+    .samples a:hover{border-bottom-color:var(--green-700)}
+    .hint{font-size:12px;color:var(--muted);margin-top:10px}
+    /* loading */
+    .loader{display:none;text-align:center;padding:36px 0}
+    .spinner{width:46px;height:46px;border:4px solid var(--green-100);border-top-color:var(--green-700);border-radius:50%;margin:0 auto 16px;animation:spin 1s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .stage{font-size:14px;font-weight:600;color:var(--green-800)}
+    .stage small{display:block;color:var(--muted);font-weight:500;margin-top:4px}
+    /* result */
+    #result{display:none}
+    .resbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+    .company{font-size:19px;font-weight:800}
+    .badge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:4px 10px;border-radius:999px;background:var(--green-100);color:var(--green-800)}
+    .spacer{flex:1}
+    .tabs{display:flex;gap:6px;background:#eef3f0;padding:5px;border-radius:12px;width:fit-content;margin-bottom:16px}
+    .tab{padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);background:transparent}
+    .tab.active{background:#fff;color:var(--green-800);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+    .view{display:none}
+    .view.active{display:block}
+    /* P&L card / table */
+    .pnl{border:1.5px solid var(--green-700);border-radius:12px;overflow:hidden}
+    .pnl-head{background:linear-gradient(135deg,var(--green-800),var(--green-700));color:#fff;padding:14px 18px}
+    .pnl-head .h1{font-size:17px;font-weight:800}
+    .pnl-head .sub{font-size:11.5px;color:#cfe8d3;margin-top:2px}
+    table{width:100%;border-collapse:collapse}
+    thead th{background:var(--green-100);border-bottom:2px solid var(--green-700);padding:10px 14px;font-size:12.5px;font-weight:700;white-space:nowrap;text-align:right}
+    thead th:first-child{text-align:left}
+    tbody td{padding:9px 14px;font-size:12.5px;white-space:nowrap;text-align:right;border-bottom:1px solid var(--line)}
+    tbody td:first-child{text-align:left;color:var(--ink)}
+    tbody tr.hl{background:var(--green-100)}
+    tbody tr.hl td{font-weight:700}
+    tbody tr.sub td:first-child{color:var(--muted);padding-left:26px;font-weight:500}
+    td.neg{color:var(--red)}
+    .pnl-foot{background:#f5f8f6;padding:7px 16px;text-align:right;font-size:10px;color:var(--muted);border-top:1px solid var(--line)}
+    pre{background:#0f2417;color:#cdeccf;border-radius:12px;padding:18px;font-size:12.5px;line-height:1.55;overflow:auto;max-height:520px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .toolbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+    /* error */
+    #error{display:none;text-align:center;padding:28px 10px}
+    .err-ico{width:54px;height:54px;border-radius:50%;background:#fdecea;color:var(--red);display:grid;place-items:center;font-size:26px;margin:0 auto 12px}
+    .err-msg{font-size:15px;font-weight:600;color:var(--red);margin-bottom:6px}
+    .err-sub{font-size:13px;color:var(--muted);margin-bottom:18px}
+    .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--green-800);color:#fff;padding:11px 18px;border-radius:10px;font-size:13px;font-weight:600;opacity:0;pointer-events:none;transition:.25s;box-shadow:var(--shadow)}
+    .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+    footer{text-align:center;font-size:12px;color:var(--muted);margin-top:28px}
+    footer b{color:var(--green-800)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="logo">🌱</div>
+      <div>
+        <h1>NIVESHAAY</h1>
+        <p>Automated Financial Results Processor</p>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <!-- INPUT -->
+    <div class="panel" id="input-panel">
+      <label class="fl" for="url">BSE / NSE corporate result PDF link</label>
+      <div class="row">
+        <input id="url" type="url" placeholder="https://www.bseindia.com/xml-data/corpfiling/AttachHis/....pdf" />
+        <button class="btn-primary" id="go" onclick="process()">Extract P&amp;L →</button>
+      </div>
+      <div class="samples">
+        Try a sample:
+        <a onclick="setUrl('https://www.bseindia.com/xml-data/corpfiling/AttachHis/ff349118-9b37-45cf-b26e-fdbcbf36acb4.pdf')">Timex Group India (Q4 FY26)</a>
+      </div>
+      <div class="hint">Paste a consolidated quarterly result PDF. The pipeline downloads it, extracts the P&amp;L with Gemini, and returns standardized JSON.</div>
+    </div>
+
+    <!-- LOADING -->
+    <div class="panel lift loader" id="loader">
+      <div class="spinner"></div>
+      <div class="stage" id="stage">Processing…<small id="stage-sub">Starting</small></div>
+    </div>
+
+    <!-- RESULT -->
+    <div class="panel lift" id="result">
+      <div class="resbar">
+        <span class="company" id="company">Company</span>
+        <span class="badge" id="qbadge">standard</span>
+        <span class="spacer"></span>
+        <button class="btn-ghost" onclick="reset_()">↺ Process another</button>
+      </div>
+      <div class="tabs">
+        <div class="tab active" data-t="table" onclick="tab('table')">📊 Table</div>
+        <div class="tab" data-t="json" onclick="tab('json')">{ } JSON</div>
+        <div class="tab" data-t="image" onclick="tab('image')">🖼 Image</div>
+      </div>
+
+      <div class="view active" id="v-table"></div>
+
+      <div class="view" id="v-json">
+        <pre id="json"></pre>
+        <div class="toolbar"><button class="btn-ghost" onclick="copyJson()">⧉ Copy JSON</button></div>
+      </div>
+
+      <div class="view" id="v-image">
+        <div id="card-wrap"></div>
+        <div class="toolbar"><button class="btn-ghost" onclick="downloadPng()">⬇ Download PNG</button></div>
+      </div>
+    </div>
+
+    <!-- ERROR -->
+    <div class="panel lift" id="error">
+      <div class="err-ico">!</div>
+      <div class="err-msg" id="err-msg">Something went wrong</div>
+      <div class="err-sub" id="err-sub"></div>
+      <button class="btn-primary" onclick="reset_()">Try again</button>
+    </div>
+
+    <footer>Built fully in <b>n8n</b> · Gemini 2.5 Flash · UI served by n8n</footer>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    var lastData = null;
+    var $ = function(id){ return document.getElementById(id); };
+    function setUrl(u){ $('url').value = u; $('url').focus(); }
+    function show(id){ ['input-panel','loader','result','error'].forEach(function(x){ $(x).style.display = (x===id?'block':'none'); }); }
+    function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(function(){t.classList.remove('show');},1800); }
+
+    function tab(name){
+      ['table','json','image'].forEach(function(n){
+        document.querySelector('.tab[data-t="'+n+'"]').classList.toggle('active', n===name);
+        $('v-'+n).classList.toggle('active', n===name);
+      });
+    }
+
+    var HL = ['revenue','gross profit','ebitda','total expenses','profit before tax','profit/loss before tax','pat','eps'];
+    function isHl(label){ var l=(label||'').toLowerCase(); return HL.some(function(k){ return l===k || l.indexOf(k)===0; }) || l.indexOf('ebitda')>-1 || l==='revenue'; }
+    function isNeg(v){ if(!v) return false; var c=String(v).replace(/[%,]/g,'').trim(); return !isNaN(parseFloat(c)) && parseFloat(c)<0; }
+
+    function rowsOf(data){ var r=[],i=1; while(data['row'+i]){ if(Array.isArray(data['row'+i])) r.push(data['row'+i].map(function(x){return x==null?'':String(x);})); i++; } return r; }
+
+    function buildTable(data){
+      var rows = rowsOf(data); if(!rows.length) return '<p>No rows.</p>';
+      var head = rows[0], body = rows.slice(1);
+      var th = head.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join('');
+      var tr = body.map(function(r){
+        var label=r[0]||'', blank = r.slice(1).every(function(c){return c==='';});
+        var cls = isHl(label)?'hl':(blank?'sub':'');
+        var tds = r.map(function(c,idx){ var neg=(idx>0&&isNeg(c))?' class="neg"':''; return '<td'+neg+'>'+esc(c)+'</td>'; }).join('');
+        return '<tr class="'+cls+'">'+tds+'</tr>';
+      }).join('');
+      return '<table><thead><tr>'+th+'</tr></thead><tbody>'+tr+'</tbody></table>';
+    }
+
+    function buildCard(data){
+      var qt = data.quarter_type==='extended'?'Extended (Q2/Q4)':'Standard (Q1/Q3)';
+      return '<div class="pnl" id="pnl-card"><div class="pnl-head"><div class="h1">'+esc(data.company_name||'Unknown Company')+
+        '</div><div class="sub">Quarterly Financial Results — '+qt+' · All values in ₹ Crores</div></div>'+
+        buildTable(data)+'<div class="pnl-foot">Generated by Niveshaay Financial Results Processor</div></div>';
+    }
+
+    function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    function render(data){
+      lastData = data;
+      $('company').textContent = data.company_name || 'Unknown Company';
+      $('qbadge').textContent = data.quarter_type || '—';
+      $('v-table').innerHTML = '<div class="pnl">'+'<div class="pnl-head"><div class="h1">'+esc(data.company_name||'')+'</div><div class="sub">All values in ₹ Crores</div></div>'+buildTable(data)+'</div>';
+      $('json').textContent = JSON.stringify(data, null, 2);
+      $('card-wrap').innerHTML = buildCard(data);
+      tab('table');
+      show('result');
+    }
+
+    function copyJson(){
+      navigator.clipboard.writeText(JSON.stringify(lastData, null, 2)).then(function(){ toast('JSON copied ✓'); },
+        function(){ toast('Copy failed'); });
+    }
+
+    function downloadPng(){
+      var el = $('pnl-card'); if(!el || !window.html2canvas){ toast('Image lib not loaded'); return; }
+      html2canvas(el, {scale:2, backgroundColor:'#ffffff'}).then(function(canvas){
+        var a=document.createElement('a');
+        a.download = ((lastData&&lastData.company_name)||'pnl').replace(/[^a-z0-9]+/gi,'_')+'.png';
+        a.href = canvas.toDataURL('image/png'); a.click(); toast('Image downloaded ✓');
+      });
+    }
+
+    function reset_(){ $('url').value=''; show('input-panel'); $('url').focus(); }
+
+    var STAGES = [[0,'Downloading PDF…','Fetching the document from BSE/NSE'],[1,'Extracting with Gemini…','Reading the consolidated P&L (this takes ~30–60s)'],[2,'Building result…','Formatting the standardized JSON']];
+    var stageTimer=null;
+    function runStages(){ var i=0; $('stage').firstChild.textContent=STAGES[0][1]; $('stage-sub').textContent=STAGES[0][2];
+      stageTimer=setInterval(function(){ i=Math.min(i+1,STAGES.length-1); $('stage').firstChild.textContent=STAGES[i][1]; $('stage-sub').textContent=STAGES[i][2]; }, 9000); }
+    function stopStages(){ if(stageTimer) clearInterval(stageTimer); stageTimer=null; }
+
+    function process(){
+      var url = $('url').value.trim();
+      if(!url){ toast('Please paste a PDF link'); $('url').focus(); return; }
+      $('go').disabled = true; show('loader'); runStages();
+      fetch('/webhook/process-pdf', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ pdfUrl: url })
+      }).then(function(res){ return res.json().then(function(j){ return {ok:res.ok, status:res.status, j:j}; }); })
+      .then(function(r){
+        stopStages(); $('go').disabled = false;
+        if(r.j && r.j.success && r.j.data){ render(r.j.data); }
+        else { showError((r.j && (r.j.error||r.j.message)) || ('Request failed ('+r.status+')')); }
+      }).catch(function(e){ stopStages(); $('go').disabled=false; showError('Network error — is the n8n workflow active? '+e.message); });
+    }
+
+    function showError(msg){
+      $('err-msg').textContent = msg;
+      $('err-sub').textContent = 'Check the link is a valid https PDF, or try another filing.';
+      show('error');
+    }
+
+    // submit on Enter
+    document.addEventListener('keydown', function(e){ if(e.key==='Enter' && document.activeElement===$('url')) process(); });
+  </script>
+</body>
+</html>
