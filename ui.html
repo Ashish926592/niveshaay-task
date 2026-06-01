@@ -48,6 +48,7 @@
     .resbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
     .company{font-size:19px;font-weight:800}
     .badge{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:4px 10px;border-radius:999px;background:var(--green-100);color:var(--green-800)}
+    .badge.cache{background:#fff3cd;color:#8a6d00}
     .spacer{flex:1}
     .tabs{display:flex;gap:6px;background:#eef3f0;padding:5px;border-radius:12px;width:fit-content;margin-bottom:16px}
     .tab{padding:8px 16px;border-radius:9px;font-size:13px;font-weight:600;color:var(--muted);background:transparent}
@@ -131,6 +132,7 @@
       <div class="resbar">
         <span class="company" id="company">Company</span>
         <span class="badge" id="qbadge">standard</span>
+        <span class="badge cache" id="cachebadge" style="display:none">⚡ Cached</span>
         <span class="spacer"></span>
         <button class="btn-ghost" onclick="reset_()">↺ Process another</button>
       </div>
@@ -206,10 +208,11 @@
 
     function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-    function render(data){
+    function render(data, cached){
       lastData = data;
       $('company').textContent = data.company_name || 'Unknown Company';
       $('qbadge').textContent = data.quarter_type || '—';
+      $('cachebadge').style.display = cached ? 'inline-block' : 'none';
       $('v-table').innerHTML = '<div class="pnl"><div class="pnl-head"><div class="h1">'+esc(data.company_name||'')+'</div><div class="sub">All values in ₹ Crores</div></div><div class="tbl-wrap">'+buildTable(data)+'</div></div>';
       $('json').textContent = JSON.stringify(data, null, 2);
       $('card-wrap').innerHTML = buildCard(data);
@@ -250,7 +253,7 @@
       }).then(function(res){ return res.json().then(function(j){ return {ok:res.ok, status:res.status, j:j}; }); })
       .then(function(r){
         stopStages(); $('go').disabled = false;
-        if(r.j && r.j.success && r.j.data){ render(r.j.data); }
+        if(r.j && r.j.success && r.j.data){ render(r.j.data, r.j.cached); }
         else { showError((r.j && (r.j.error||r.j.message)) || ('Request failed ('+r.status+')')); }
       }).catch(function(e){ stopStages(); $('go').disabled=false; showError('Network error — is the n8n workflow active? '+e.message); });
     }

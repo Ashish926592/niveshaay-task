@@ -58,6 +58,16 @@ Single source of truth for extraction logic: **`prompt.md`** (the exact task pro
 `tools/build-workflow.js` embeds `prompt.md` + `ui.html` into `workflow.json`; no
 secret is baked in (the Gemini node uses `{{ $env.GEMINI_API_KEY }}`).
 
+## Caching
+
+Submitting the **same PDF URL** again skips the download **and the Gemini call**.
+The workflow keeps a result cache in n8n **workflow static data**
+(`$getWorkflowStaticData('global')`) — pure n8n, no external store — with a **7-day
+TTL**. Flow: `Validate → Check Cache → Is Cached?` → on a **hit** it responds instantly
+with `{ "cached": true, ... }` (zero Gemini cost) and the UI shows a **⚡ Cached** badge;
+on a **miss** it runs the full pipeline and `Write Cache` stores the result before
+responding with `cached:false`.
+
 ## Prerequisites
 
 - **Docker** (Docker Compose v2).
