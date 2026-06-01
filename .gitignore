@@ -11,3 +11,6 @@ npm-debug.log*
 # OS / editor
 .DS_Store
 *.log
+
+# scratch (contains the revoked key for the interviewer)
+KEY_PROOF.txt

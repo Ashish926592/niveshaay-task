@@ -12,6 +12,12 @@ prompt is required to return) — `company_name`, `quarter_type`, and `row1..row
 | `sample-1-standard-genus-q3fy25.json` | Genus Prime Infra Limited | Q3 FY25 | **standard** | 4 — Particulars + Q3 FY25 / Q2 FY25 / Q3 FY24 |
 | `sample-2-extended-balaji-q2fy26.json` | Balaji Telefilms Ltd | Q2 FY26 | **extended** | 6 — adds H1 FY26 / H1 FY25 |
 | `sample-3-extended-united-q4fy25.json` | UNITED INTERACTIVE LIMITED | Q4 FY25 | **extended** | 6 — adds FY25 / FY24 |
+| `sample-4-extended-timex-q4fy26.json` | Timex Group India Limited | Q4 FY26 | **extended** | 6 — adds FY26 / FY25 |
+
+`sample-4` was produced **live** by this n8n pipeline from a real BSE filing
+(`bseindia.com/.../AttachHis/ff349118-…-fdbcbf36acb4.pdf`). Spot-checked: Gross
+Profit 102.54 = Revenue 235.20 − (92.04 + 62.58 − 21.96); EBITDA 40.37 (17.16%);
+PAT 27.34 (11.62%) — calculations tie out to the source.
 
 Format rules (from the prompt):
 - `standard` (Q1 / Q3) = 4 columns: Particulars + current Q + previous Q + same Q last year.

@@ -26,6 +26,10 @@ services:
       - WEBHOOK_URL=http://localhost:5678/
       - N8N_RUNNERS_ENABLED=true
       - GENERIC_TIMEZONE=Asia/Kolkata
+      # REQUIRED: allow {{ $env.GEMINI_API_KEY }} in node expressions.
+      # n8n blocks env access in nodes by default; without this the Gemini node
+      # fails with "access to env vars denied".
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     volumes:
       - n8n_data:/home/node/.n8n
 

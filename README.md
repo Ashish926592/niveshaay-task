@@ -163,4 +163,14 @@ form still returns JSON.
   if WhatsApp rejects the session.
 - **BSE link “download failed”** → BSE/NSE attachment URLs expire and need a browser
   User-Agent (already sent). Re-copy a fresh link from the filing.
-- **Large PDF timeout** → Gemini node timeout is 120s; retry, or trim the PDF.
+- **"access to env vars denied"** at the Gemini node → n8n blocks `$env` in expressions
+  by default. `docker-compose.yml` sets `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`; if you run
+  n8n some other way, set that env var too (or store the key as an n8n credential).
+- **Large PDF timeout** → Gemini node timeout is 120s. A ~2.6 MB PDF takes Gemini ~55s;
+  retry, or trim the PDF.
+
+## Verified
+
+Run live on n8n 2.22.5 against a real BSE filing (Timex Group India Ltd, Q4 FY26):
+form → validate → download (2.6 MB PDF) → Gemini 2.5 Flash → standardized JSON, shown
+on the success screen in ~55s. See `samples/sample-4-extended-timex-q4fy26.json`.
