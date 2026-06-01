@@ -1,0 +1,13 @@
+# Secrets — never commit
+.env
+
+# Node
+node_modules/
+npm-debug.log*
+
+# n8n local data (if mounted locally)
+.n8n/
+
+# OS / editor
+.DS_Store
+*.log

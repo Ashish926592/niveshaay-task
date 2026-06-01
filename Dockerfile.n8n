@@ -1,0 +1,32 @@
+# Custom n8n image = stock n8n + Chromium + the n8n-nodes-puppeteer community node.
+# This is what lets the whole pipeline (including the P&L image) run INSIDE n8n,
+# with the Evolution API as the only external service.
+FROM n8nio/n8n:latest
+
+USER root
+
+# Chromium + the fonts/libs Puppeteer needs to render the P&L table on Alpine.
+RUN apk add --no-cache \
+      chromium \
+      nss \
+      freetype \
+      harfbuzz \
+      ca-certificates \
+      ttf-freefont \
+  && (ln -sf /usr/bin/chromium /usr/bin/chromium-browser 2>/dev/null || true)
+
+# Use the system Chromium instead of letting Puppeteer download its own.
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    N8N_PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+
+# Pre-install the community node into n8n's nodes directory so it is available
+# on first boot (no manual "install community node" step needed).
+USER node
+RUN mkdir -p /home/node/.n8n/nodes \
+  && cd /home/node/.n8n/nodes \
+  && npm init -y >/dev/null 2>&1 \
+  && npm install n8n-nodes-puppeteer --omit=dev
+
+USER node

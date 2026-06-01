@@ -1,0 +1,66 @@
+# ──────────────────────────────────────────────────────────────────────────
+# Niveshaay Financial Results Pipeline
+#
+#   n8n        — the entire pipeline (form + processing + image). Port 5678.
+#   evolution  — WhatsApp gateway (the ONLY external service). Port 8080. Optional.
+#   postgres   — datastore for Evolution only. Port 5434. Optional.
+#
+# Core usage (form -> Gemini -> JSON):   docker compose up -d n8n
+# With WhatsApp:                          docker compose up -d   (all services)
+# ──────────────────────────────────────────────────────────────────────────
+services:
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile.n8n
+    container_name: niveshaay_n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    env_file:
+      - .env
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_RUNNERS_ENABLED=true
+      - GENERIC_TIMEZONE=Asia/Kolkata
+    volumes:
+      - n8n_data:/home/node/.n8n
+
+  # ── Optional: WhatsApp delivery via Evolution API ──────────────────────────
+  evolution:
+    image: atendai/evolution-api:v2.1.1
+    container_name: niveshaay_evolution
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-change-me}
+      - DATABASE_ENABLED=true
+      - DATABASE_PROVIDER=postgresql
+      - DATABASE_CONNECTION_URI=postgresql://evolution:evolution123@postgres:5432/evolution
+      - DATABASE_CONNECTION_CLIENT_NAME=evolution
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1023204200
+    depends_on:
+      - postgres
+    profiles: ["whatsapp"]
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: niveshaay_postgres
+    restart: unless-stopped
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_USER=evolution
+      - POSTGRES_PASSWORD=evolution123
+      - POSTGRES_DB=evolution
+    volumes:
+      - evolution_pgdata:/var/lib/postgresql/data
+    profiles: ["whatsapp"]
+
+volumes:
+  n8n_data:
+  evolution_pgdata:

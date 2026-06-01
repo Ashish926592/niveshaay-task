@@ -1,0 +1,606 @@
+{
+  "id": "niveshaayfinres1",
+  "name": "Niveshaay — Automated Financial Results Processor",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "process-pdf",
+        "formTitle": "Niveshaay — Corporate Result Processor",
+        "formDescription": "Paste a BSE/NSE corporate result PDF link. The pipeline extracts the consolidated P&L and returns standardized JSON (and, if configured, posts a P&L image to WhatsApp).",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "PDF Link",
+              "fieldType": "text",
+              "placeholder": "https://www.bseindia.com/xml-data/corpfiling/AttachLive/result.pdf",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "nv-0001",
+      "name": "On form submission",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        400
+      ],
+      "webhookId": "process-pdf-form"
+    },
+    {
+      "parameters": {
+        "jsCode": "const pdfUrl = String($input.first().json[\"PDF Link\"] || \"\").trim();\nif (!pdfUrl) {\n  return [{ json: { error: true, message: \"PDF URL is required\" } }];\n}\nif (!pdfUrl.startsWith(\"https://\")) {\n  return [{ json: { error: true, message: \"URL must start with https://\" } }];\n}\nif (!pdfUrl.toLowerCase().includes(\".pdf\")) {\n  return [{ json: { error: true, message: \"URL must point to a PDF file (.pdf)\" } }];\n}\nreturn [{ json: { pdfUrl, error: false } }];"
+      },
+      "id": "nv-0002",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        460,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "nv-0003",
+      "name": "Is Valid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        680,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "⚠ Invalid input",
+        "completionMessage": "={{ $json.message || 'Invalid request.' }}",
+        "options": {}
+      },
+      "id": "nv-0004",
+      "name": "Invalid Input",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        900,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "url": "={{ $('Validate Input').first().json.pdfUrl }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "application/pdf,application/octet-stream,*/*"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          },
+          "timeout": 30000
+        }
+      },
+      "id": "nv-0005",
+      "name": "Download PDF",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        900,
+        340
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "⚠ Download failed",
+        "completionMessage": "Failed to download the PDF. The link may be invalid, expired, or blocked. Please check the URL and try again.",
+        "options": {}
+      },
+      "id": "nv-0006",
+      "name": "Download Error",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const binaryDataBuffer = await this.helpers.getBinaryDataBuffer(0, 'data');\nconst base64Pdf = binaryDataBuffer.toString('base64');\n\nconst PROMPT = \"You are a financial data processor that converts quarterly P&L statements into standardized JSON format. You are only to look at the consolidated financial results.\\n\\nThe table can be under any form including but not limited 'FINANCIAL RESULTS FOR THE QUARTER / YEAR ENDED', 'STATEMENT OF AUDITED/UNAUDITED CONSOLIDATED FINANCIAL RESULTS FOR THE HALF YEAR ENDED AND YEAR ENDED MARCH', 'CONSOLIDATED FINANCIAL RESULTS FOR THE QUARTER', 'Profit and Loss statement', 'PnL', 'Statement of Audited Financial Results for the Half Year & Year ended' and so on.\\n\\nCritical: Look and process the standalone statement only and only if consolidated statement is not present.\\n\\nImportant: If you don't find the profit and loss statement in the document just output no pnl found and nothing else.\\n\\n## 1. DATA EXTRACTION RULES\\n\\nCompany Name Extraction\\n1. Identify: Look for legal entity markers (\\\"Limited\\\", \\\"Ltd\\\", \\\"Pvt\\\", \\\"Inc\\\").\\n2. Formatting:\\n   - Use Title Case for names (e.g., \\\"Tata Motors\\\").\\n   - Keep acronyms ALL CAPS (e.g., \\\"ITC Limited\\\", \\\"H.G. Infra\\\").\\n   - If no name is found, output: \\\"Unknown Company\\\"\\n\\n## OUTPUT FORMAT (STRICT)\\n\\nReturn ONLY valid JSON with no explanations.\\n\\n### CRITICAL: Column count depends on the quarter type:\\n\\nFor Q1 and Q3 - output 4 columns per row (Particulars + 3 data columns):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"standard\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q1 FY26\\\", \\\"Q4 FY25\\\", \\\"Q1 FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"3611.02\\\", \\\"3347.70\\\", \\\"4132.67\\\"],\\n  ...\\n}\\n\\nFor Q2 - output 6 columns per row (Particulars + 5 data columns, adding H1 of current and previous year):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"extended\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q2 FY26\\\", \\\"Q1 FY26\\\", \\\"Q2 FY25\\\", \\\"H1 FY26\\\", \\\"H1 FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"450.50\\\", \\\"425.30\\\", \\\"380.20\\\", \\\"875.80\\\", \\\"740.50\\\"],\\n  ...\\n}\\n\\nFor Q4 - output 6 columns per row (Particulars + 5 data columns, adding full year current and previous year):\\n{\\n  \\\"company_name\\\": \\\"Tata Motors\\\",\\n  \\\"quarter_type\\\": \\\"extended\\\",\\n  \\\"row1\\\": [\\\"Particulars\\\", \\\"Q4 FY26\\\", \\\"Q3 FY26\\\", \\\"Q4 FY25\\\", \\\"FY26\\\", \\\"FY25\\\"],\\n  \\\"row2\\\": [\\\"Revenue\\\", \\\"450.50\\\", \\\"425.30\\\", \\\"380.20\\\", \\\"1800.00\\\", \\\"1650.00\\\"],\\n  ...\\n}\\n\\n## TABLE STRUCTURE\\n\\n### Column Headers\\n- Column 1: \\\"Particulars\\\"\\n- Column 2: Most recent quarter\\n- Column 3: Previous consecutive quarter\\n- Column 4: Same quarter from previous year\\n- Column 5 (Q2/Q4 only): H1 current year (Q2) OR Full Year current (Q4)\\n- Column 6 (Q2/Q4 only): H1 previous year (Q2) OR Full Year previous (Q4)\\n\\n### Quarter Naming Convention\\n- 30-Jun-25 -> Q1 FY26\\n- 30-Sep-25 -> Q2 FY26\\n- 31-Dec-25 -> Q3 FY26\\n- 31-Mar-26 -> Q4 FY26\\n\\n### Row Order (Standard P&L)\\n1. Revenue\\n2. Expenses (leave values blank - heading only)\\n3. [Expense line items - varies by company]\\n4. Gross Profit*\\n5. Gross Profit Margin*\\n6. Employee Benefit Expense\\n7. [Other operating expenses - varies]\\n8. Other expenses\\n9. Total Expenses*\\n10. EBITDA*\\n11. EBITDA Margin*\\n12. Depreciation\\n13. Finance Cost\\n14. Profit before Exceptional Items, Other Income*\\n15. Other Income\\n16. [Exceptional items - if present]\\n17. [Share of profit/loss in JV/Associate - if present]\\n18. Profit/Loss Before Tax*\\n19. Tax Expenses\\n20. PAT*\\n21. PAT Margin*\\n22. EPS (Basic)\\n\\n*Calculated if missing\\n\\nYou are required to look at the given data and intelligently add or remove fields.\\n\\nNote:\\n1. Service charges/Service Cost are not included in the gross profit calculation.\\n2. Revenue is revenue from operations and not total revenue.\\n3. If excise duty is present then there will be a net revenue = revenue - excise duty.\\n4. Make sure that the values you pick and output are of the correct quarters.\\n\\n## CALCULATION FORMULAS\\n\\nGross Profit = Revenue - COGS-type expenses\\nGross Profit Margin = (Gross Profit / Revenue) x 100\\nTotal Expenses = Sum of all expense line items (excluding Depreciation and Finance Cost)\\nEBITDA = Revenue - Total Operating Expenses (excluding Depreciation, Finance Cost and other income)\\nEBITDA Margin = (EBITDA / Revenue) x 100\\nProfit before Exceptional Items, Other Income = EBITDA - Depreciation - Finance Cost\\nProfit Before Tax = EBITDA - Depreciation - Finance Cost + Other Income +/- Exceptional items +/- Share of profit/loss in JV\\nPAT = Profit Before Tax - Tax Expenses\\nPAT Margin = (PAT / Revenue) x 100\\nEPS (Basic) = Use provided value only; do not calculate\\n\\nFor Q2 and Q4, apply the same calculation formulas to the H1/FY columns.\\n\\n## DATA PROCESSING RULES\\n- Convert ALL values to Rs Crores\\n- Round to 2 decimal places\\n- Treat \\\"-\\\" or null as 0 (except for EPS)\\n- Add \\\"%\\\" suffix to all margin calculations\\n- All numeric values must be strings in JSON\\n- Verify all calculations before final output\";\n\nconst requestBody = {\n  contents: [\n    {\n      parts: [\n        { inline_data: { mime_type: \"application/pdf\", data: base64Pdf } },\n        { text: PROMPT }\n      ]\n    }\n  ]\n};\n\nreturn [{ json: { requestBody } }];"
+      },
+      "id": "nv-0007",
+      "name": "Prepare Gemini Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1120,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ \"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=\" + $env.GEMINI_API_KEY }}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.requestBody) }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "nv-0008",
+      "name": "Call Gemini API",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1340,
+        340
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "⚠ Gemini API error",
+        "completionMessage": "The Gemini API call failed. Please verify the GEMINI_API_KEY and quota, then try again.",
+        "options": {}
+      },
+      "id": "nv-0009",
+      "name": "Gemini Call Error",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        1560,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const response = $input.first().json;\nconst candidates = response.candidates;\nif (!candidates || candidates.length === 0) {\n  return [{ json: { error: true, message: \"No response from Gemini.\" } }];\n}\n\nlet responseText = candidates[0].content?.parts?.[0]?.text || \"\";\n\nif (responseText.trim().toLowerCase().includes(\"no pnl found\")) {\n  return [{ json: { error: true, message: \"No P&L statement found in this PDF.\" } }];\n}\n\n// Strip markdown code fences without using backtick literals\nlet cleaned = responseText.trim();\nconst fence = String.fromCharCode(96, 96, 96);\nif (cleaned.startsWith(fence + \"json\")) {\n  cleaned = cleaned.slice(7);\n} else if (cleaned.startsWith(fence)) {\n  cleaned = cleaned.slice(3);\n}\nif (cleaned.endsWith(fence)) {\n  cleaned = cleaned.slice(0, -3);\n}\ncleaned = cleaned.trim();\n\nlet parsedData;\ntry {\n  parsedData = JSON.parse(cleaned);\n} catch (e) {\n  return [{ json: { error: true, message: \"Failed to parse the Gemini response as JSON.\" } }];\n}\n\nreturn [{ json: { error: false, data: parsedData } }];"
+      },
+      "id": "nv-0010",
+      "name": "Parse Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond",
+              "leftValue": "={{ $json.error }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "nv-0011",
+      "name": "Parse OK?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1780,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "⚠ Could not extract P&L",
+        "completionMessage": "={{ $json.message || 'Extraction failed.' }}",
+        "options": {}
+      },
+      "id": "nv-0012",
+      "name": "Extraction Error",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        2000,
+        540
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $input.first().json.data;\nconst groupJid = String($env.WHATSAPP_GROUP_JID || \"\").trim();\n// skip the image/WhatsApp branch entirely when no group JID is configured\nreturn [{ json: { data, skip: !groupJid } }];"
+      },
+      "id": "nv-0013",
+      "name": "Prepare Image Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2000,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "cond",
+              "leftValue": "={{ $json.skip }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "equals",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "nv-0014",
+      "name": "WhatsApp Configured?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const data = $json.data || {};\nconst companyName = data.company_name || \"Unknown Company\";\nconst quarterType = data.quarter_type === \"extended\" ? \"Extended (Q2/Q4)\" : \"Standard (Q1/Q3)\";\nconst esc = (s) => String(s == null ? \"\" : s).replace(/&/g, \"&amp;\").replace(/</g, \"&lt;\").replace(/>/g, \"&gt;\").replace(/\"/g, \"&quot;\");\n\nconst rows = [];\nlet i = 1;\nwhile (data[\"row\" + i]) {\n  if (Array.isArray(data[\"row\" + i])) rows.push(data[\"row\" + i].map((v) => String(v == null ? \"\" : v)));\n  i++;\n}\nconst header = rows[0] || [];\nconst body = rows.slice(1);\n\nconst isHi = (l) => { l = (l || \"\").toLowerCase(); return l.includes(\"ebitda\") || l.includes(\"profit\") || l.includes(\"pat\") || l.includes(\"revenue\") || l.includes(\"total expenses\") || l.includes(\"eps\"); };\nconst isNeg = (v) => { if (!v) return false; const c = v.replace(/[%,]/g, \"\").trim(); return !isNaN(parseFloat(c)) && parseFloat(c) < 0; };\n\nconst th = header.map((h) => '<th style=\"padding:10px 16px;text-align:' + (h === \"Particulars\" ? \"left\" : \"right\") + ';white-space:nowrap;font-weight:600;font-size:13px;\">' + esc(h) + '</th>').join(\"\");\nconst tr = body.map((r) => {\n  const label = r[0] || \"\";\n  const hi = isHi(label);\n  const bg = hi ? \"background-color:#e8f5e9;\" : \"\";\n  const fw = hi ? \"font-weight:600;\" : \"font-weight:400;\";\n  const tds = r.map((c, idx) => {\n    const al = idx === 0 ? \"left\" : \"right\";\n    const col = idx > 0 && isNeg(c) ? \"color:#d32f2f;\" : \"color:#1a1a1a;\";\n    return '<td style=\"padding:8px 16px;text-align:' + al + ';' + fw + col + 'font-size:13px;white-space:nowrap;\">' + esc(c) + '</td>';\n  }).join(\"\");\n  return '<tr style=\"' + bg + 'border-bottom:1px solid #e0e0e0;\">' + tds + '</tr>';\n}).join(\"\");\n\nconst html = [\n  '<!DOCTYPE html><html><head><meta charset=\"utf-8\"/>',\n  '<style>* { margin:0; padding:0; box-sizing:border-box; } body { font-family: Segoe UI, Arial, sans-serif; background:#fff; padding:20px; } .container { max-width:1100px; border:2px solid #2e7d32; border-radius:8px; overflow:hidden; } .header { background:linear-gradient(135deg,#1b5e20,#2e7d32); padding:16px 20px; } .header h1 { color:#fff; font-size:20px; font-weight:700; } .header .subtitle { color:#c8e6c9; font-size:12px; margin-top:4px; } table { width:100%; border-collapse:collapse; } thead { background:#e8f5e9; } thead th { border-bottom:2px solid #2e7d32; } .footer { background:#f5f5f5; padding:8px 20px; text-align:right; font-size:10px; color:#888; border-top:1px solid #e0e0e0; }</style>',\n  '</head><body><div class=\"container\"><div class=\"header\"><h1>' + esc(companyName) + '</h1><div class=\"subtitle\">Quarterly Financial Results — ' + esc(quarterType) + ' | All values in Rs. Crores</div></div>',\n  '<table><thead><tr>' + th + '</tr></thead><tbody>' + tr + '</tbody></table>',\n  '<div class=\"footer\">Generated by Niveshaay Financial Results Processor</div></div></body></html>'\n].join(\"\");\n\nconst dataUrl = \"data:text/html;charset=utf-8;base64,\" + Buffer.from(html, \"utf-8\").toString(\"base64\");\nreturn [{ json: { data, html, dataUrl } }];"
+      },
+      "id": "nv-0015",
+      "name": "Build P&L HTML",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2220,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getScreenshot",
+        "url": "={{ $json.dataUrl }}",
+        "fullPage": true,
+        "output": "binary",
+        "binaryProperty": "data",
+        "imageType": "png",
+        "options": {}
+      },
+      "id": "nv-0016",
+      "name": "Render PNG",
+      "type": "n8n-nodes-puppeteer.puppeteer",
+      "typeVersion": 1,
+      "position": [
+        2440,
+        160
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const buf = await this.helpers.getBinaryDataBuffer(0, 'data');\nreturn [{ json: { base64: buf.toString('base64') } }];"
+      },
+      "id": "nv-0017",
+      "name": "Image to Base64",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2660,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.EVOLUTION_API_URL + \"/message/sendMedia/\" + $env.EVOLUTION_INSTANCE }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{ $env.EVOLUTION_API_KEY }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: \"image\", mimetype: \"image/png\", media: $json.base64, fileName: \"financial_results.png\", caption: \"P&L Results: \" + ($('Prepare Image Payload').first().json.data.company_name || \"\") }) }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "nv-0018",
+      "name": "Send to WhatsApp",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        160
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "completionTitle": "={{ '✓ ' + ($('Parse Response').first().json.data.company_name || 'Result') + ' — ' + ($('Parse Response').first().json.data.quarter_type || '') }}",
+        "completionMessage": "={{ JSON.stringify($('Parse Response').first().json.data, null, 2) }}",
+        "options": {}
+      },
+      "id": "nv-0019",
+      "name": "Success",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 1,
+      "position": [
+        2660,
+        360
+      ]
+    }
+  ],
+  "connections": {
+    "On form submission": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Is Valid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid?": {
+      "main": [
+        [
+          {
+            "node": "Invalid Input",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download PDF": {
+      "main": [
+        [
+          {
+            "node": "Prepare Gemini Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Download Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Gemini Request": {
+      "main": [
+        [
+          {
+            "node": "Call Gemini API",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Gemini API": {
+      "main": [
+        [
+          {
+            "node": "Parse Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gemini Call Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Response": {
+      "main": [
+        [
+          {
+            "node": "Parse OK?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse OK?": {
+      "main": [
+        [
+          {
+            "node": "Extraction Error",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Prepare Image Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Image Payload": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Configured?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Configured?": {
+      "main": [
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build P&L HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build P&L HTML": {
+      "main": [
+        [
+          {
+            "node": "Render PNG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Render PNG": {
+      "main": [
+        [
+          {
+            "node": "Image to Base64",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Image to Base64": {
+      "main": [
+        [
+          {
+            "node": "Send to WhatsApp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
