@@ -114,7 +114,8 @@ const formTrigger = {
   type: "n8n-nodes-base.formTrigger",
   typeVersion: 2.2,
   position: [240, 400],
-  webhookId: "process-pdf-form",
+  // n8n serves the public form at /form/<webhookId>; keep it == path so the URL is /form/process-pdf
+  webhookId: "process-pdf",
 };
 
 const validate = code(

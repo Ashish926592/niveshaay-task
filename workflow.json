@@ -27,7 +27,7 @@
         240,
         400
       ],
-      "webhookId": "process-pdf-form"
+      "webhookId": "process-pdf"
     },
     {
       "parameters": {
