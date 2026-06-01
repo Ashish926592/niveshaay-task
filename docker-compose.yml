@@ -1,14 +1,17 @@
 # ──────────────────────────────────────────────────────────────────────────
 # Niveshaay Financial Results Pipeline
 #
-#   n8n        — the whole app: serves the UI (GET /webhook/ui) AND the JSON API
-#                (POST /webhook/process-pdf). Stock image; no Chromium needed
-#                (the P&L image is rendered in-browser). Port 5678.
-#   evolution  — OPTIONAL WhatsApp gateway (only if you add WhatsApp delivery). 8080.
-#   postgres   — datastore for Evolution only. 5434. Optional.
+#   n8n           — the whole app: serves the UI (GET /webhook/ui) AND the JSON API
+#                   (POST /webhook/process-pdf). Stock image; no Chromium needed
+#                   (the P&L image is rendered in-browser). Port 5678.
+#   evolution     — OPTIONAL WhatsApp gateway (only if you add WhatsApp delivery). 8080.
+#   postgres      — datastore for Evolution. 5434. Optional.
+#   redis         — cache for Evolution (required by Evolution v2). Optional.
+#   image-service — OPTIONAL Puppeteer PNG renderer for the WhatsApp branch. 3001.
 #
-# Run:        docker compose up -d n8n      (then import + activate workflow.json)
-# WhatsApp:   docker compose --profile whatsapp up -d   (advanced, see README)
+# Easiest:    ./setup.sh                 (brings everything up + imports the workflow)
+# Core only:  docker compose up -d n8n   (then import + activate workflow.json)
+# WhatsApp:   docker compose --profile whatsapp up -d   (postgres+redis+evolution+image-service+n8n)
 # ──────────────────────────────────────────────────────────────────────────
 services:
   n8n:
@@ -32,6 +35,7 @@ services:
       - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     volumes:
       - n8n_data:/home/node/.n8n
+      - ./workflow.json:/workflow.json:ro   # used by setup.sh to import the workflow
 
   # ── Optional: WhatsApp delivery via Evolution API ──────────────────────────
   evolution:
@@ -41,14 +45,30 @@ services:
     ports:
       - "8080:8080"
     environment:
+      - SERVER_URL=http://localhost:8080
       - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-change-me}
       - DATABASE_ENABLED=true
       - DATABASE_PROVIDER=postgresql
       - DATABASE_CONNECTION_URI=postgresql://evolution:evolution123@postgres:5432/evolution
       - DATABASE_CONNECTION_CLIENT_NAME=evolution
-      - CONFIG_SESSION_PHONE_VERSION=2.3000.1023204200
+      # Redis cache — REQUIRED. Without it Evolution v2 crash-loops on "redis disconnected".
+      - CACHE_REDIS_ENABLED=true
+      - CACHE_REDIS_URI=redis://redis:6379/8
+      - CACHE_REDIS_PREFIX_KEY=evolution
+      - CACHE_REDIS_SAVE_INSTANCES=false
+      - CACHE_LOCAL_ENABLED=true
+      - CONFIG_SESSION_PHONE_VERSION=2.3000.1040549582
     depends_on:
       - postgres
+      - redis
+    profiles: ["whatsapp"]
+
+  redis:
+    image: redis:7-alpine
+    container_name: niveshaay_redis
+    restart: unless-stopped
+    volumes:
+      - evolution_redis:/data
     profiles: ["whatsapp"]
 
   postgres:
@@ -65,6 +85,18 @@ services:
       - evolution_pgdata:/var/lib/postgresql/data
     profiles: ["whatsapp"]
 
+  # ── Optional: Puppeteer PNG renderer for the WhatsApp branch ───────────────
+  # n8n's "Render Image" node POSTs the P&L JSON to http://image-service:3001
+  # /generate-image and gets back { base64 } (the styled green PNG).
+  image-service:
+    build: ./image-service
+    container_name: niveshaay_image_service
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    profiles: ["whatsapp"]
+
 volumes:
   n8n_data:
   evolution_pgdata:
+  evolution_redis:

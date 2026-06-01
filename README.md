@@ -70,10 +70,19 @@ responding with `cached:false`.
 
 ## Prerequisites
 
-- **Docker** (Docker Compose v2).
+- **Docker.** The `docker compose` v2 plugin is recommended; if it's missing,
+  `setup.sh` automatically falls back to a plain `docker run` for the core app.
+  (The optional WhatsApp profile still needs Compose.)
 - A **Google Gemini API key** — <https://aistudio.google.com/apikey>.
 
 ## Setup & run
+
+> **Quick start (one command):** `cp .env.example .env` and set `GEMINI_API_KEY`, then
+> **`./setup.sh`** (core: UI + PDF→Gemini→JSON + cache) or **`./setup.sh whatsapp`**
+> (also brings up **postgres + redis + evolution + image-service** for WhatsApp image
+> delivery). `setup.sh` builds/starts the stack, **imports + activates** the workflow,
+> and in `whatsapp` mode creates the Evolution instance and prints the QR-link + group-JID
+> steps. The manual steps below are the same thing, broken out.
 
 ### 1. Configure the key
 
@@ -84,28 +93,47 @@ cp .env.example .env
 
 `workflow.json` is **secret-free** (uses `{{ $env.GEMINI_API_KEY }}`); never commit `.env`.
 
-### 2. Start n8n
+### 2. Start everything (one command)
 
 ```bash
-docker compose up -d n8n
+./setup.sh
+```
+
+It starts n8n, waits for it, **imports _and activates_** the workflow, restarts to
+register the webhooks, and prints the URL. Idempotent — re-run it any time to
+re-import after editing `prompt.md` / `ui.html` (run `node tools/build-workflow.js` first).
+Works with or without the Compose plugin: if `docker compose` is missing it falls
+back to a plain `docker run` (same image, env, and `n8n_data` volume).
+
+Stop it later with `docker compose down` (or, on the `docker run` path, `docker rm -f niveshaay_n8n`).
+
+<details><summary>…or do the same steps by hand</summary>
+
+Import + activate must happen with n8n **stopped** — its SQLite DB can't be written
+by the CLI while the server holds it (you'd hit `SQLITE_BUSY`). Use a one-shot container:
+
+```bash
+# Compose:
+docker compose run --rm --no-deps -v "$PWD/workflow.json":/tmp/workflow.json:ro \
+  n8n import:workflow --input=/tmp/workflow.json
+docker compose run --rm --no-deps n8n update:workflow --id=niveshaayfinres1 --active=true
+docker compose up -d n8n                                              # start it (registers webhooks)
+
+# docker run (no Compose):
+docker run --rm -v n8n_data:/home/node/.n8n -v "$PWD/workflow.json":/tmp/workflow.json:ro \
+  n8nio/n8n:latest import:workflow --input=/tmp/workflow.json
+docker run --rm -v n8n_data:/home/node/.n8n n8nio/n8n:latest update:workflow --id=niveshaayfinres1 --active=true
+docker run -d --name niveshaay_n8n -p 5678:5678 --env-file .env \
+  -e N8N_BLOCK_ENV_ACCESS_IN_NODE=false -v n8n_data:/home/node/.n8n n8nio/n8n:latest
 ```
 
 > The compose file sets **`N8N_BLOCK_ENV_ACCESS_IN_NODE=false`** — required, or the
 > Gemini node fails with *"access to env vars denied"* (n8n blocks `$env` by default).
+> You can also open <http://localhost:5678>, import `workflow.json`, and toggle **Active**
+> (the editor asks you to create a local owner account the first time).
+</details>
 
-### 3. Import & activate the workflow
-
-```bash
-docker cp workflow.json niveshaay_n8n:/tmp/workflow.json
-docker exec niveshaay_n8n n8n import:workflow --input=/tmp/workflow.json
-docker restart niveshaay_n8n            # registers the webhooks on boot
-```
-
-(Or open <http://localhost:5678>, import `workflow.json`, and toggle **Active**.)
-> Edit the prompt in `prompt.md` or the UI in `ui.html`, then
-> `node tools/build-workflow.js` and re-import.
-
-### 4. Use it
+### 3. Use it
 
 Open **<http://localhost:5678/webhook/ui>**, paste a BSE/NSE consolidated-result PDF
 link, and click **Extract P&L**. Or hit the API directly:
@@ -142,14 +170,15 @@ See `samples/` for example outputs.
 ```
 .
 ├── README.md
+├── setup.sh                # one command: start n8n + import + activate + print URL
 ├── .env.example            # copy → .env (GEMINI_API_KEY)
-├── docker-compose.yml      # n8n (stock image) + optional evolution/postgres (whatsapp profile)
+├── docker-compose.yml      # n8n (stock image) + optional evolution/postgres/image-service (whatsapp profile)
 ├── workflow.json           # the importable n8n workflow — serves UI + JSON API (secret-free)
 ├── ui.html                 # the web app n8n serves at /webhook/ui
 ├── prompt.md               # the exact Gemini extraction prompt (single source of truth)
 ├── tools/build-workflow.js # regenerates workflow.json from prompt.md + ui.html
 ├── samples/                # real outputs (standard + extended) + notes
-└── Dockerfile.n8n          # ONLY for the optional WhatsApp-image extension (see below)
+└── image-service/          # ONLY for the optional WhatsApp image (Puppeteer PNG renderer)
 ```
 
 ## WhatsApp delivery (Evolution API)
@@ -158,8 +187,9 @@ On a **fresh extraction** the workflow renders the P&L as a PNG and posts it to 
 WhatsApp group. The branch is `Success Response → Prepare Send → WhatsApp Configured?
 → Render Image → Send to WhatsApp`:
 
-- **Render Image** → `POST {IMAGE_SERVICE_URL}/generate-image` — a small Puppeteer
-  service that turns the P&L JSON into the styled green PNG, returns `{ base64 }`.
+- **Render Image** → `POST {IMAGE_SERVICE_URL}/generate-image` — the small Puppeteer
+  service bundled in `image-service/` that turns the P&L JSON into the same styled
+  green PNG the UI shows, and returns `{ base64 }`.
 - **Send to WhatsApp** → `POST {EVOLUTION_API_URL}/message/sendMedia/{EVOLUTION_INSTANCE}`
   (header `apikey`) with `{ number: WHATSAPP_GROUP_JID, mediatype:"image", media:<base64>, caption }`.
 
@@ -168,26 +198,43 @@ re-send** (avoids spamming the group on repeat views).
 
 ### One-time setup
 
-**1. Run the services** (Evolution API + its Postgres + the image-service):
+**1. Run the services** (Evolution API + Postgres + **Redis** + the image-service). Either:
 
 ```bash
-docker compose --profile whatsapp up -d   # postgres (5434) + evolution (8080)
-# image-service (Puppeteer PNG renderer) on 3001 — run from ./image-service
+# A) Compose-free (no plugin needed): runs them on a shared docker network and
+#    connects n8n to it. Evolution admin is on :8081 (leaves host :8080 free).
+./setup.sh whatsapp
+
+# B) With the Compose v2 plugin: the `whatsapp` profile brings them up alongside n8n.
+#    Evolution admin is on :8080.
+docker compose --profile whatsapp up -d   # postgres + redis + evolution (8080) + image-service (3001)
 ```
 
-**2. Create an instance and link WhatsApp (QR scan — must be done by a human):**
+> Evolution v2 **requires Redis** — both paths now start a `redis` container and set
+> `CACHE_REDIS_ENABLED=true` / `CACHE_REDIS_URI=redis://redis:6379/8`. Without it Evolution
+> crash-loops on `redis disconnected` and exits.
+
+Either way n8n reaches the services by name (`http://evolution:8080`, `http://image-service:3001`).
+The steps below use **`$ADMIN`** for the admin base URL — set it to match the path you chose:
 
 ```bash
-KEY=change-me                      # = EVOLUTION_API_KEY
-# create the instance
-curl -X POST http://localhost:8080/instance/create -H "apikey: $KEY" \
+ADMIN=http://localhost:8081    # path A (./setup.sh whatsapp);  use :8080 for path B
+KEY=change-me                  # = EVOLUTION_API_KEY in .env
+```
+
+> Path A already creates the `niveshaay` instance for you — you only need the QR scan (step 2).
+
+**2. Link WhatsApp (QR scan — must be done by a human):**
+
+```bash
+# (path B only) create the instance — path A's ./setup.sh whatsapp already did this:
+curl -X POST $ADMIN/instance/create -H "apikey: $KEY" \
   -H 'Content-Type: application/json' \
   -d '{"instanceName":"niveshaay","integration":"WHATSAPP-BAILEYS","qrcode":true}'
-# get the QR (also visible at the manager UI http://localhost:8080/manager)
-curl http://localhost:8080/instance/connect/niveshaay -H "apikey: $KEY"
-#   → scan it in WhatsApp: Settings → Linked Devices → Link a device
+# scan the QR at the manager UI:  $ADMIN/manager   (open instance "niveshaay")
+#   → WhatsApp: Settings → Linked Devices → Link a device
 # confirm it linked:
-curl http://localhost:8080/instance/connectionState/niveshaay -H "apikey: $KEY"
+curl $ADMIN/instance/connectionState/niveshaay -H "apikey: $KEY"
 #   → {"instance":{"instanceName":"niveshaay","state":"open"}}   (open = linked)
 ```
 
@@ -195,7 +242,7 @@ curl http://localhost:8080/instance/connectionState/niveshaay -H "apikey: $KEY"
 
 ```bash
 curl -H "apikey: $KEY" \
-  "http://localhost:8080/group/fetchAllGroups/niveshaay?getParticipants=false"
+  "$ADMIN/group/fetchAllGroups/niveshaay?getParticipants=false"
 ```
 
 It returns an array; each group has an `id` like `120363XXXXXXXXXXXX@g.us` (that **is**
@@ -209,16 +256,25 @@ the JID) and a `subject` (the group name). Pick the one you want:
 > be slow (Baileys fetches metadata) — give it 30–60s. For a clean demo, make a dedicated
 > group (e.g. "Niveshaay Test"), add yourself, then read its JID here.
 
-**4. Configure & restart:**
+**4. Set the group JID & apply:**
+
+`.env` already ships these (n8n reaches the services by name on both paths), so
+`WHATSAPP_GROUP_JID` is usually the only value you change:
 
 ```bash
-# in .env:
-WHATSAPP_GROUP_JID=120363407XXXXXXXXX@g.us
-EVOLUTION_API_URL=http://evolution:8080      # or http://host.docker.internal:8080 (n8n in a container, Evolution on host)
+WHATSAPP_GROUP_JID=120363407XXXXXXXXX@g.us   # ← the group to post to
+EVOLUTION_API_URL=http://evolution:8080
 EVOLUTION_API_KEY=change-me
 EVOLUTION_INSTANCE=niveshaay
-IMAGE_SERVICE_URL=http://image-service:3001  # or http://host.docker.internal:3001
-docker restart niveshaay_n8n
+IMAGE_SERVICE_URL=http://image-service:3001
+```
+
+Apply the change so n8n picks up the new env:
+
+```bash
+# Compose path:     docker compose up -d n8n
+# docker run path:  docker rm -f niveshaay_n8n && ./setup.sh whatsapp
+#   (a plain `docker restart` does NOT re-read --env-file)
 ```
 
 Now submit a (new) PDF in the UI → the P&L image is posted to that group.
@@ -241,8 +297,12 @@ EBITDA 40.37 / 17.16%, PAT 27.34 / 11.62%). See
 ## Troubleshooting
 
 - **"access to env vars denied"** → set `N8N_BLOCK_ENV_ACCESS_IN_NODE=false` (compose does this).
-- **Webhook 404 right after start** → the workflow must be **Active**; n8n registers webhooks
-  on boot, so `docker restart niveshaay_n8n` after import/activate.
+- **`SQLITE_BUSY: database is locked` on import** → you ran `n8n import:workflow` (via
+  `docker exec`) while n8n was running; the live server holds the SQLite DB. Import via a
+  one-shot container with n8n **stopped** (see step 2's "by hand" block). `./setup.sh` does this.
+- **Webhook 404 right after start** → the workflow must be **Active**. `import:workflow`
+  alone leaves it inactive — activate it (`n8n update:workflow --id=niveshaayfinres1
+  --active=true`) before starting n8n. `./setup.sh` does both for you.
 - **BSE link "download failed"** → BSE/NSE attachment URLs expire; re-copy a fresh link.
 - **Large PDF** → Gemini node timeout is 120s; a ~2.6 MB PDF takes ~55s.
 - **html2canvas not loading** (image download) → the page loads it from a CDN; needs internet.

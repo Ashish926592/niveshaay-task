@@ -4,7 +4,7 @@ These are real standardized-JSON outputs produced by this pipeline (n8n → Gemi
 2.5 Flash) from BSE/NSE consolidated corporate-result PDFs. They satisfy
 Deliverable #2 and demonstrate **both** quarter formats.
 
-Each file is exactly what the form's success screen shows (the `data` object the
+Each file is exactly what the UI's result screen shows (the `data` object the
 prompt is required to return) — `company_name`, `quarter_type`, and `row1..rowN`.
 
 | File | Company | Quarter | `quarter_type` | Columns |
@@ -27,6 +27,7 @@ Format rules (from the prompt):
 
 ## Regenerate your own samples
 
-Bring up the stack (see the root `README.md`), open the form
-(`http://localhost:5678/form/process-pdf`), paste a BSE/NSE result PDF link, and
-submit. The success screen prints the JSON — copy it into a new file here.
+Bring up the stack (see the root `README.md`), open the UI
+(`http://localhost:5678/webhook/ui`), paste a BSE/NSE result PDF link, and submit.
+The result screen prints the JSON — copy it from the **{ } JSON** tab into a new
+file here.
