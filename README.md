@@ -152,13 +152,77 @@ See `samples/` for example outputs.
 └── Dockerfile.n8n          # ONLY for the optional WhatsApp-image extension (see below)
 ```
 
-## Optional: WhatsApp delivery (advanced)
+## WhatsApp delivery (Evolution API)
 
-The core app shows/downloads the image in-browser. If you also want n8n to render the
-P&L as a PNG and **post it to a WhatsApp group**, that path uses the
-`n8n-nodes-puppeteer` community node (needs Chromium → build with `Dockerfile.n8n`) and
-the **Evolution API** (`docker compose --profile whatsapp up -d`). It's kept separate so
-the core app stays a single stock-n8n container. Ask if you want it wired into this UI.
+On a **fresh extraction** the workflow renders the P&L as a PNG and posts it to a
+WhatsApp group. The branch is `Success Response → Prepare Send → WhatsApp Configured?
+→ Render Image → Send to WhatsApp`:
+
+- **Render Image** → `POST {IMAGE_SERVICE_URL}/generate-image` — a small Puppeteer
+  service that turns the P&L JSON into the styled green PNG, returns `{ base64 }`.
+- **Send to WhatsApp** → `POST {EVOLUTION_API_URL}/message/sendMedia/{EVOLUTION_INSTANCE}`
+  (header `apikey`) with `{ number: WHATSAPP_GROUP_JID, mediatype:"image", media:<base64>, caption }`.
+
+It only runs when `WHATSAPP_GROUP_JID` is set (empty ⇒ skipped), and **cache hits do not
+re-send** (avoids spamming the group on repeat views).
+
+### One-time setup
+
+**1. Run the services** (Evolution API + its Postgres + the image-service):
+
+```bash
+docker compose --profile whatsapp up -d   # postgres (5434) + evolution (8080)
+# image-service (Puppeteer PNG renderer) on 3001 — run from ./image-service
+```
+
+**2. Create an instance and link WhatsApp (QR scan — must be done by a human):**
+
+```bash
+KEY=change-me                      # = EVOLUTION_API_KEY
+# create the instance
+curl -X POST http://localhost:8080/instance/create -H "apikey: $KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"instanceName":"niveshaay","integration":"WHATSAPP-BAILEYS","qrcode":true}'
+# get the QR (also visible at the manager UI http://localhost:8080/manager)
+curl http://localhost:8080/instance/connect/niveshaay -H "apikey: $KEY"
+#   → scan it in WhatsApp: Settings → Linked Devices → Link a device
+# confirm it linked:
+curl http://localhost:8080/instance/connectionState/niveshaay -H "apikey: $KEY"
+#   → {"instance":{"instanceName":"niveshaay","state":"open"}}   (open = linked)
+```
+
+**3. Get the WhatsApp GROUP JID** — the value `WHATSAPP_GROUP_JID` needs:
+
+```bash
+curl -H "apikey: $KEY" \
+  "http://localhost:8080/group/fetchAllGroups/niveshaay?getParticipants=false"
+```
+
+It returns an array; each group has an `id` like `120363XXXXXXXXXXXX@g.us` (that **is**
+the JID) and a `subject` (the group name). Pick the one you want:
+
+```json
+[ { "id": "120363407XXXXXXXXX@g.us", "subject": "Niveshaay Test" }, ... ]
+```
+
+> Tips: the linked account must already be a **member** of the group. This endpoint can
+> be slow (Baileys fetches metadata) — give it 30–60s. For a clean demo, make a dedicated
+> group (e.g. "Niveshaay Test"), add yourself, then read its JID here.
+
+**4. Configure & restart:**
+
+```bash
+# in .env:
+WHATSAPP_GROUP_JID=120363407XXXXXXXXX@g.us
+EVOLUTION_API_URL=http://evolution:8080      # or http://host.docker.internal:8080 (n8n in a container, Evolution on host)
+EVOLUTION_API_KEY=change-me
+EVOLUTION_INSTANCE=niveshaay
+IMAGE_SERVICE_URL=http://image-service:3001  # or http://host.docker.internal:3001
+docker restart niveshaay_n8n
+```
+
+Now submit a (new) PDF in the UI → the P&L image is posted to that group.
+(`sendText` is an alternative if you prefer a text summary over an image.)
 
 ## Security
 
