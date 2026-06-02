@@ -432,7 +432,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const data = $('Parse Response').first().json.data;\nconst jid = String($env.WHATSAPP_GROUP_JID || \"\").trim();\nreturn [{ json: { data, skip: !jid } }];"
+        "jsCode": "const data = $json.data;\nconst jid = String($env.WHATSAPP_GROUP_JID || \"\").trim();\nreturn [{ json: { data, skip: !jid } }];"
       },
       "id": "nv-0020",
       "name": "Prepare Send",
@@ -512,7 +512,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: \"image\", mimetype: \"image/png\", media: $json.base64, fileName: \"pnl.png\", caption: \"P&L Results: \" + ($('Parse Response').first().json.data.company_name || \"\") }) }}",
+        "jsonBody": "={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: \"image\", mimetype: \"image/png\", media: $json.base64, fileName: \"pnl.png\", caption: \"P&L Results: \" + ($('Prepare Send').first().json.data.company_name || \"\") }) }}",
         "options": {
           "timeout": 30000
         }
@@ -603,6 +603,17 @@
         [
           {
             "node": "Download PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cached Response": {
+      "main": [
+        [
+          {
+            "node": "Prepare Send",
             "type": "main",
             "index": 0
           }

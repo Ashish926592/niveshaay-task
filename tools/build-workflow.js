@@ -179,9 +179,12 @@ const successResponse = respondJson("Success Response",
   200, [2440, 420]);
 
 // ── WhatsApp delivery (after responding to the user) ──────────────────────────
-// Only on a FRESH extraction (cache hits don't re-spam). Gated on WHATSAPP_GROUP_JID.
+// Fires on BOTH a fresh extraction AND a cache hit (both feed Prepare Send).
+// `data` is taken from the incoming item (Write Cache or Check Cache both carry
+// it through their respond node) so it works regardless of which path ran.
+// Gated on WHATSAPP_GROUP_JID.
 const prepareSend = code("Prepare Send", `
-const data = $('Parse Response').first().json.data;
+const data = $json.data;
 const jid = String($env.WHATSAPP_GROUP_JID || "").trim();
 return [{ json: { data, skip: !jid } }];
 `, [2660, 420]);
@@ -202,7 +205,7 @@ const sendWhatsapp = http("Send to WhatsApp", {
   sendHeaders: true,
   headerParameters: { parameters: [{ name: "apikey", value: "={{ $env.EVOLUTION_API_KEY }}" }] },
   sendBody: true, specifyBody: "json",
-  jsonBody: '={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: "image", mimetype: "image/png", media: $json.base64, fileName: "pnl.png", caption: "P&L Results: " + ($(\'Parse Response\').first().json.data.company_name || "") }) }}',
+  jsonBody: '={{ JSON.stringify({ number: $env.WHATSAPP_GROUP_JID, mediatype: "image", mimetype: "image/png", media: $json.base64, fileName: "pnl.png", caption: "P&L Results: " + ($(\'Prepare Send\').first().json.data.company_name || "") }) }}',
   options: { timeout: 30000 },
 }, [3320, 360], "continueErrorOutput");
 
@@ -230,6 +233,9 @@ const workflow = {
       [{ node: "Cached Response", type: "main", index: 0 }],
       [{ node: "Download PDF", type: "main", index: 0 }],
     ] },
+    // Cache hit: respond to the user with the cached JSON, then ALSO deliver the
+    // image to WhatsApp (same Prepare Send -> Render -> Send path as a fresh run).
+    "Cached Response": { main: [[{ node: "Prepare Send", type: "main", index: 0 }]] },
     "Download PDF": { main: [
       [{ node: "Prepare Gemini Request", type: "main", index: 0 }],
       [{ node: "Download Error", type: "main", index: 0 }],
