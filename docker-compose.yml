@@ -39,7 +39,7 @@ services:
 
   # ── Optional: WhatsApp delivery via Evolution API ──────────────────────────
   evolution:
-    image: atendai/evolution-api:v2.1.1
+    image: atendai/evolution-api:latest
     container_name: niveshaay_evolution
     restart: unless-stopped
     ports:

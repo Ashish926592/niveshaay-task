@@ -144,7 +144,7 @@ if [ "$WANT_WHATSAPP" = "1" ]; then
       -e CACHE_REDIS_SAVE_INSTANCES=false \
       -e CACHE_LOCAL_ENABLED=true \
       -e CONFIG_SESSION_PHONE_VERSION=2.3000.1040549582 \
-      atendai/evolution-api:v2.1.1 >/dev/null
+      atendai/evolution-api:latest >/dev/null
   fi
 
   # image-service (build then run; stateless → recreate to pick up rebuilds) ────
